@@ -23,13 +23,13 @@ jobs:
       - name: Create release ZIP
         run: |
           cd custom_components/qvantum_hass
-          zip -r ../../qvantum_hass.zip . -x "__pycache__/*"
+          zip -r ../../qvantum-hass.zip . -x "__pycache__/*"
           cd ../..
-          ls -lh qvantum_hass.zip
+          ls -lh qvantum-hass.zip
 
       - name: Upload release asset
         uses: softprops/action-gh-release@v1
         with:
-          files: qvantum_hass.zip
+          files: qvantum-hass.zip
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
