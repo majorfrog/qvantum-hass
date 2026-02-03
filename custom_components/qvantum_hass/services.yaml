@@ -1,0 +1,32 @@
+activate_extra_hot_water:
+  name: Activate Extra Hot Water
+  description: Activate extra hot water mode for a specified duration
+  fields:
+    device_id:
+      name: Device ID
+      description: The Qvantum device ID
+      required: true
+      selector:
+        text:
+    duration:
+      name: Duration
+      description: How long to activate extra hot water (in hours)
+      required: true
+      selector:
+        number:
+          min: 1
+          max: 24
+          step: 1
+          unit_of_measurement: hours
+          mode: slider
+
+cancel_extra_hot_water:
+  name: Cancel Extra Hot Water
+  description: Cancel active extra hot water mode
+  fields:
+    device_id:
+      name: Device ID
+      description: The Qvantum device ID
+      required: true
+      selector:
+        text:

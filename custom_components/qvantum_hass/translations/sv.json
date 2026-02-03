@@ -1,0 +1,516 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Qvantum värmepump",
+        "description": "Ange dina Qvantum-kontouppgifter",
+        "data": {
+          "email": "E-post",
+          "password": "Lösenord",
+          "api_key": "API-nyckel (valfritt)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Kunde inte ansluta till Qvantum API",
+      "invalid_auth": "Ogiltig autentisering",
+      "no_devices": "Inga enheter hittades för detta konto",
+      "unknown": "Oväntat fel"
+    },
+    "abort": {
+      "already_configured": "Kontot är redan konfigurerat"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Qvantum-alternativ",
+        "description": "Konfigurera uppdateringsintervall för sensorer",
+        "data": {
+          "scan_interval": "Normalt uppdateringsintervall (sekunder, 10-300)",
+          "fast_scan_interval": "Snabbt uppdateringsintervall för effekt/ström (sekunder, 5-60)"
+        }
+      }
+    }
+  },
+  "services": {
+    "activate_extra_hot_water": {
+      "name": "Aktivera extra varmvatten",
+      "description": "Aktiverar extra varmvattenläge för en angiven varaktighet",
+      "fields": {
+        "device_id": {
+          "name": "Enhets-ID",
+          "description": "Enhetsidentifieraren"
+        },
+        "duration": {
+          "name": "Varaktighet",
+          "description": "Varaktighet i timmar (1-24)"
+        }
+      }
+    },
+    "cancel_extra_hot_water": {
+      "name": "Avbryt extra varmvatten",
+      "description": "Avbryter aktivt extra varmvattenläge",
+      "fields": {
+        "device_id": {
+          "name": "Enhets-ID",
+          "description": "Enhetsidentifieraren"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "bf1_l_min": {
+        "name": "Flödesgivare för Varmvatten"
+      },
+      "bp1_pressure": {
+        "name": "Lågtrycksbar"
+      },
+      "bp1_temp": {
+        "name": "Lågtryckstemperatur"
+      },
+      "bp2_pressure": {
+        "name": "Högtrycksbar"
+      },
+      "bp2_temp": {
+        "name": "Högtryckstemperatur"
+      },
+      "bt1": {
+        "name": "Utomhustemperatur"
+      },
+      "bt2": {
+        "name": "Inomhustemperatur"
+      },
+      "bt10": {
+        "name": "Kondensor utlopp"
+      },
+      "bt11": {
+        "name": "Framledning"
+      },
+      "bt13": {
+        "name": "Kondensor inlopp"
+      },
+      "bt14": {
+        "name": "Frånluftstemperatur"
+      },
+      "bt15": {
+        "name": "Avluftstemperatur"
+      },
+      "bt20": {
+        "name": "Trycksida"
+      },
+      "bt21": {
+        "name": "Vätskeledning"
+      },
+      "bt22": {
+        "name": "Förångare inlopp"
+      },
+      "bt23": {
+        "name": "Sugledning"
+      },
+      "bt30": {
+        "name": "Ackumulatortank"
+      },
+      "bt31": {
+        "name": "VV primär laddning inlopp"
+      },
+      "bt33": {
+        "name": "VV kallvatten inlopp"
+      },
+      "bt34": {
+        "name": "VV varmvatten utlopp"
+      },
+      "cal_heat_temp": {
+        "name": "Framledning målvärde"
+      },
+      "compressormeasuredspeed": {
+        "name": "Kompressorhastighet"
+      },
+      "dhw_normal_start": {
+        "name": "Ackumulatortank nedre gräns"
+      },
+      "dhw_normal_stop": {
+        "name": "Ackumulatortank övre gräns"
+      },
+      "fan0_10v": {
+        "name": "Fläkthastighet (0-10V)"
+      },
+      "gp1_speed": {
+        "name": "Cirkulationspump"
+      },
+      "gp2_speed": {
+        "name": "VV laddningspump"
+      },
+      "qn8position": {
+        "name": "Shuntventil, tillägg"
+      },
+      "powertotal": {
+        "name": "Total effekt"
+      },
+      "compressorenergy": {
+        "name": "Kompressorenergi"
+      },
+      "additionalenergy": {
+        "name": "Tillskottsenergi"
+      },
+      "inputcurrent1": {
+        "name": "Ström L1"
+      },
+      "inputcurrent2": {
+        "name": "Ström L2"
+      },
+      "inputcurrent3": {
+        "name": "Ström L3"
+      },
+      "dhw_outl_temp_5": {
+        "name": "VV utloppstemperatur"
+      },
+      "dhw_outl_temp_15": {
+        "name": "VV utloppstemperatur 15"
+      },
+      "dhw_outl_temp_max": {
+        "name": "VV utloppstemperatur max"
+      },
+      "dhw_prioritytime": {
+        "name": "VV prioritetstid"
+      },
+      "fanrpm": {
+        "name": "Fläkthastighet"
+      },
+      "hp_status": {
+        "name": "Värmepumpsstatus",
+        "state": {
+          "idle": "Vänteläge",
+          "defrosting": "Avfrostning",
+          "hot_water": "Varmvatten",
+          "heating": "Uppvärmning"
+        }
+      },
+      "tap_water_cap": {
+        "name": "Varmvattenkapacitet"
+      },
+      "op_mode": {
+        "name": "Driftläge",
+        "state": {
+          "auto": "Auto",
+          "manual": "Manuell",
+          "additional_heat_only": "Endast tillskottsvärme"
+        }
+      },
+      "op_mode_sensor": {
+        "name": "Driftlägesgivare",
+        "state": {
+          "off": "Av",
+          "bt2": "BT2 (Inomhusgivare)",
+          "bt3": "BT3 (Framledningsgivare)",
+          "btx": "BTX (Extern givare)"
+        }
+      },
+      "smart_sh_mode": {
+        "name": "Smart SH-läge"
+      },
+      "smart_dhw_mode": {
+        "name": "Smart VV-läge"
+      },
+      "calc_suppy_cpr": {
+        "name": "Beräknad Supply CPR"
+      },
+      "btx": {
+        "name": "BTX"
+      },
+      "bt4": {
+        "name": "BT4"
+      },
+      "bt12": {
+        "name": "Extern framledning"
+      },
+      "dhwpower": {
+        "name": "VV effekt"
+      },
+      "heatingpower": {
+        "name": "Värmeeffekt"
+      },
+      "guide_des_temp": {
+        "name": "Guide önskad temperatur"
+      },
+      "guide_he": {
+        "name": "Guide uppvärmning"
+      },
+      "price_region": {
+        "name": "Prisregion"
+      },
+      "room_temp_ext": {
+        "name": "Rumstemperatur (extern)"
+      },
+      "dhwdemand": {
+        "name": "VV efterfrågan"
+      },
+      "heatingdemand": {
+        "name": "Värmeefterfrågan"
+      },
+      "coolingdemand": {
+        "name": "Kylbehov"
+      },
+      "heatingreleased": {
+        "name": "Värme frigiven"
+      },
+      "coolingreleased": {
+        "name": "Kyla frigiven"
+      },
+      "compressorreleased": {
+        "name": "Kompressor frigiven"
+      },
+      "additionreleased": {
+        "name": "Tillskottsvärme frigiven"
+      },
+      "dhw_prioritytimeleft": {
+        "name": "VV återstående prioritetstid"
+      },
+      "heating_prioritytimeleft": {
+        "name": "Värme återstående prioritetstid"
+      },
+      "cooling_priotitytimeleft": {
+        "name": "Kyl återstående prioritetstid"
+      },
+      "switch_state": {
+        "name": "Växlingstillstånd"
+      },
+      "dhwstop_temp": {
+        "name": "Ackumulatortank stopptemperatur"
+      },
+      "dhwstart_temp": {
+        "name": "Ackumulatortank starttemperatur"
+      },
+      "filtered60sec_outdoortemp": {
+        "name": "Filtrerad utomhustemperatur (60s)"
+      },
+      "max_freq_env": {
+        "name": "Max frekvens miljö"
+      },
+      "dhw_set": {
+        "name": "VV inställning"
+      },
+      "bp1_temp_20min_filter": {
+        "name": "BP1 temp 20min filter"
+      },
+      "max_bp2_env": {
+        "name": "Max BP2 miljö"
+      },
+      "picpin_mask": {
+        "name": "PIC pin-mask"
+      },
+      "uptime": {
+        "name": "Drifttid"
+      },
+      "display_fw_version": {
+        "name": "Display firmware-version"
+      },
+      "cc_fw_version": {
+        "name": "CC firmware-version"
+      },
+      "inv_fw_version": {
+        "name": "Inverter firmware-version"
+      },
+      "alarm_count": {
+        "name": "Antal larm",
+        "state_attributes": {
+          "unit_of_measurement": {
+            "alarms": "larm"
+          }
+        }
+      },
+      "active_alarms": {
+        "name": "Aktiva larm",
+        "state": {
+          "none": "Inga"
+        }
+      },
+      "service_access_until": {
+        "name": "Serviceåtkomst till"
+      },
+      "access_level": {
+        "name": "Åtkomstnivå"
+      },
+      "access_expires_at": {
+        "name": "Åtkomst upphör"
+      }
+    },
+    "select": {
+      "indoor_temperature_target": {
+        "name": "Inomhus måltemperatur",
+        "state": {
+          "temp_15c": "15°C",
+          "temp_16c": "16°C",
+          "temp_17c": "17°C",
+          "temp_18c": "18°C",
+          "temp_19c": "19°C",
+          "temp_20c": "20°C",
+          "temp_21c": "21°C",
+          "temp_22c": "22°C",
+          "temp_23c": "23°C",
+          "temp_24c": "24°C",
+          "temp_25c": "25°C"
+        }
+      },
+      "smartcontrol": {
+        "name": "Smartkontroll",
+        "state": {
+          "off": "Av",
+          "eco": "Eko",
+          "balanced": "Balanserad",
+          "comfort": "Komfort"
+        }
+      },
+      "tap_water_capacity_target": {
+        "name": "Varmvattenkapacitetsmål"
+      },
+      "dhw_priority": {
+        "name": "VV prioritet",
+        "state": {
+          "normal_30min": "Normal (30 minuter)",
+          "plus_1h": "+ (1 timme)",
+          "plus_plus_2h": "++ (2 timmar)"
+        }
+      },
+      "dhw_mode": {
+        "name": "VV-läge",
+        "state": {
+          "eco": "Eko",
+          "normal": "Normal",
+          "extra": "Extra"
+        }
+      },
+      "operation_mode": {
+        "name": "Driftläge",
+        "state": {
+          "auto": "Auto",
+          "manual": "Manuell",
+          "additional_heat_only": "Endast tillskottsvärme"
+        }
+      },
+      "dhw_out_temp": {
+        "name": "VV utloppstemperatur",
+        "state": {
+          "normal_52c": "Normal (52°C)",
+          "hot_55c": "Varm (55°C)",
+          "very_hot_58c": "Mycket varm (58°C)"
+        }
+      },
+      "room_comp_factor": {
+        "name": "Rumskompenseringsfaktor",
+        "state": {
+          "none": "Ingen kompensering",
+          "minimum": "Minimum (0,5)",
+          "normal": "Normal (1)",
+          "maximum": "Maximum (2)"
+        }
+      },
+      "heating_curve_shift": {
+        "name": "Värmekurvjustering",
+        "state": {
+          "minus_9": "-9 (Mycket kallare)",
+          "minus_8": "-8",
+          "minus_7": "-7",
+          "minus_6": "-6",
+          "minus_5": "-5",
+          "minus_4": "-4",
+          "minus_3": "-3",
+          "minus_2": "-2",
+          "minus_1": "-1",
+          "zero": "0 (Normal)",
+          "plus_1": "+1",
+          "plus_2": "+2",
+          "plus_3": "+3",
+          "plus_4": "+4",
+          "plus_5": "+5",
+          "plus_6": "+6",
+          "plus_7": "+7",
+          "plus_8": "+8",
+          "plus_9": "+9 (Mycket varmare)"
+        }
+      },
+      "sensor_mode": {
+        "name": "Givarläge",
+        "state": {
+          "off": "Av",
+          "bt2": "BT2 (Inomhusgivare)",
+          "bt3": "BT3 (Framledningsgivare)",
+          "btx": "BTX (Extern givare)"
+        }
+      }
+    },
+    "switch": {
+      "extra_hot_water": {
+        "name": "Extra varmvatten"
+      },
+      "smart_control_heating": {
+        "name": "Smartkontroll värme"
+      },
+      "smart_control_dhw": {
+        "name": "Smartkontroll VV"
+      },
+      "manual_dhw": {
+        "name": "Manuell: VV"
+      },
+      "manual_additional_heat": {
+        "name": "Manuell: Tillskottsvärme"
+      },
+      "manual_cooling": {
+        "name": "Manuell: Kyla"
+      },
+      "vacation_mode": {
+        "name": "Semesterläge"
+      },
+      "auto_elevate_access": {
+        "name": "Auto-höj åtkomst"
+      }
+    },
+    "button": {
+      "extra_hot_water_1h": {
+        "name": "Extra varmvatten 1 timme"
+      },
+      "refresh_sensors": {
+        "name": "Uppdatera sensorer"
+      },
+      "elevate_access_level": {
+        "name": "Höj åtkomstnivå"
+      }
+    },
+    "binary_sensor": {
+      "additional_power_l1": {
+        "name": "Tillskott L1"
+      },
+      "additional_power_l2": {
+        "name": "Tillskott L2"
+      },
+      "additional_power_l3": {
+        "name": "Tillskott L3"
+      },
+      "diverting_valve": {
+        "name": "Omledningsventil VV/värme"
+      },
+      "enable_sc_dhw": {
+        "name": "Smartkontroll: VV"
+      },
+      "enable_sc_sh": {
+        "name": "Smartkontroll: Värme"
+      },
+      "use_adaptive": {
+        "name": "Smartkontroll"
+      },
+      "cooling_enabled": {
+        "name": "Kyla aktiverad"
+      },
+      "connectivity": {
+        "name": "Anslutning"
+      },
+      "service_access": {
+        "name": "Serviceåtkomst"
+      },
+      "alarm_state": {
+        "name": "Larmtillstånd"
+      }
+    }
+  }
+}

@@ -1,0 +1,13 @@
+{
+  "domain": "qvantum_hass",
+  "name": "Qvantum Heat Pump",
+  "codeowners": ["@majorfrog"],
+  "config_flow": true,
+  "dependencies": [],
+  "documentation": "https://github.com/majorfrog/qvantum-hass",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/majorfrog/qvantum-hass/issues",
+  "requirements": ["requests>=2.28.0"],
+  "version": "1.0.0"
+}

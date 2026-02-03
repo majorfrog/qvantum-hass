@@ -1,0 +1,516 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Qvantum Heat Pump",
+        "description": "Enter your Qvantum account credentials",
+        "data": {
+          "email": "Email",
+          "password": "Password",
+          "api_key": "API Key (optional)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to Qvantum API",
+      "invalid_auth": "Invalid authentication",
+      "no_devices": "No devices found for this account",
+      "unknown": "Unexpected error"
+    },
+    "abort": {
+      "already_configured": "Account is already configured"
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Qvantum options",
+        "description": "Configure polling intervals for sensors",
+        "data": {
+          "scan_interval": "Normal scan interval (seconds, 10-300)",
+          "fast_scan_interval": "Fast scan interval for power/current (seconds, 5-60)"
+        }
+      }
+    }
+  },
+  "services": {
+    "activate_extra_hot_water": {
+      "name": "Activate extra hot water",
+      "description": "Activates extra hot water mode for a specified duration",
+      "fields": {
+        "device_id": {
+          "name": "Device ID",
+          "description": "The device identifier"
+        },
+        "duration": {
+          "name": "Duration",
+          "description": "Duration in hours (1-24)"
+        }
+      }
+    },
+    "cancel_extra_hot_water": {
+      "name": "Cancel extra hot water",
+      "description": "Cancels active extra hot water mode",
+      "fields": {
+        "device_id": {
+          "name": "Device ID",
+          "description": "The device identifier"
+        }
+      }
+    }
+  },
+  "entity": {
+    "sensor": {
+      "bf1_l_min": {
+        "name": "Flow sensor DHW"
+      },
+      "bp1_pressure": {
+        "name": "Low pressure bar"
+      },
+      "bp1_temp": {
+        "name": "Low pressure temperature"
+      },
+      "bp2_pressure": {
+        "name": "High pressure bar"
+      },
+      "bp2_temp": {
+        "name": "High pressure temperature"
+      },
+      "bt1": {
+        "name": "Outdoor"
+      },
+      "bt2": {
+        "name": "Indoor"
+      },
+      "bt10": {
+        "name": "Condenser outlet"
+      },
+      "bt11": {
+        "name": "Heating medium flow"
+      },
+      "bt13": {
+        "name": "Condenser inlet"
+      },
+      "bt14": {
+        "name": "Exhaust air temperature"
+      },
+      "bt15": {
+        "name": "Extract air temperature"
+      },
+      "bt20": {
+        "name": "Discharge line"
+      },
+      "bt21": {
+        "name": "Liquid line"
+      },
+      "bt22": {
+        "name": "Evaporator inlet"
+      },
+      "bt23": {
+        "name": "Suction line"
+      },
+      "bt30": {
+        "name": "Accumulator tank"
+      },
+      "bt31": {
+        "name": "DHW primary charge inlet"
+      },
+      "bt33": {
+        "name": "DHW cold water inlet"
+      },
+      "bt34": {
+        "name": "DHW hot water outlet"
+      },
+      "cal_heat_temp": {
+        "name": "Heating medium flow target"
+      },
+      "compressormeasuredspeed": {
+        "name": "Compressor speed"
+      },
+      "dhw_normal_start": {
+        "name": "Accumulator tank lower limit"
+      },
+      "dhw_normal_stop": {
+        "name": "Accumulator tank upper limit"
+      },
+      "fan0_10v": {
+        "name": "Fan speed (0-10V)"
+      },
+      "gp1_speed": {
+        "name": "Circulation pump"
+      },
+      "gp2_speed": {
+        "name": "DHW charge pump"
+      },
+      "qn8position": {
+        "name": "Shuntvalve, addition"
+      },
+      "powertotal": {
+        "name": "Total Power"
+      },
+      "compressorenergy": {
+        "name": "Compressor Energy"
+      },
+      "additionalenergy": {
+        "name": "Additional Energy"
+      },
+      "inputcurrent1": {
+        "name": "Input Current L1"
+      },
+      "inputcurrent2": {
+        "name": "Input Current L2"
+      },
+      "inputcurrent3": {
+        "name": "Input Current L3"
+      },
+      "dhw_outl_temp_5": {
+        "name": "DHW outlet temperature"
+      },
+      "dhw_outl_temp_15": {
+        "name": "DHW outlet temperature 15"
+      },
+      "dhw_outl_temp_max": {
+        "name": "DHW outlet temperature max"
+      },
+      "dhw_prioritytime": {
+        "name": "DHW priority time"
+      },
+      "fanrpm": {
+        "name": "Fan speed"
+      },
+      "hp_status": {
+        "name": "Heat pump status",
+        "state": {
+          "idle": "Idle",
+          "defrosting": "Defrosting",
+          "hot_water": "Hot water",
+          "heating": "Heating"
+        }
+      },
+      "tap_water_cap": {
+        "name": "Hot water capacity"
+      },
+      "op_mode": {
+        "name": "Operation mode",
+        "state": {
+          "auto": "Auto",
+          "manual": "Manual",
+          "additional_heat_only": "Additional heat only"
+        }
+      },
+      "op_mode_sensor": {
+        "name": "Operation mode sensor",
+        "state": {
+          "off": "Off",
+          "bt2": "BT2 (Indoor sensor)",
+          "bt3": "BT3 (Flow sensor)",
+          "btx": "BTX (External sensor)"
+        }
+      },
+      "smart_sh_mode": {
+        "name": "Smart SH mode"
+      },
+      "smart_dhw_mode": {
+        "name": "Smart DHW mode"
+      },
+      "calc_suppy_cpr": {
+        "name": "Calculated Supply CPR"
+      },
+      "btx": {
+        "name": "BTX"
+      },
+      "bt4": {
+        "name": "BT4"
+      },
+      "bt12": {
+        "name": "External heating flow"
+      },
+      "dhwpower": {
+        "name": "DHW Power"
+      },
+      "heatingpower": {
+        "name": "Heating Power"
+      },
+      "guide_des_temp": {
+        "name": "Guide desired temperature"
+      },
+      "guide_he": {
+        "name": "Guide heating"
+      },
+      "price_region": {
+        "name": "Price region"
+      },
+      "room_temp_ext": {
+        "name": "Room temperature (external)"
+      },
+      "dhwdemand": {
+        "name": "DHW demand"
+      },
+      "heatingdemand": {
+        "name": "Heating demand"
+      },
+      "coolingdemand": {
+        "name": "Cooling demand"
+      },
+      "heatingreleased": {
+        "name": "Heating released"
+      },
+      "coolingreleased": {
+        "name": "Cooling released"
+      },
+      "compressorreleased": {
+        "name": "Compressor released"
+      },
+      "additionreleased": {
+        "name": "Additional heat released"
+      },
+      "dhw_prioritytimeleft": {
+        "name": "DHW priority time remaining"
+      },
+      "heating_prioritytimeleft": {
+        "name": "Heating priority time remaining"
+      },
+      "cooling_priotitytimeleft": {
+        "name": "Cooling priority time remaining"
+      },
+      "switch_state": {
+        "name": "Switch State"
+      },
+      "dhwstop_temp": {
+        "name": "Accumulator tank stop temperature"
+      },
+      "dhwstart_temp": {
+        "name": "Accumulator tank start temperature"
+      },
+      "filtered60sec_outdoortemp": {
+        "name": "Outdoor temperature (60s filtered)"
+      },
+      "max_freq_env": {
+        "name": "Max Frequency Environment"
+      },
+      "dhw_set": {
+        "name": "DHW Set"
+      },
+      "bp1_temp_20min_filter": {
+        "name": "BP1 Temp 20min Filter"
+      },
+      "max_bp2_env": {
+        "name": "Max BP2 Environment"
+      },
+      "picpin_mask": {
+        "name": "PIC Pin Mask"
+      },
+      "uptime": {
+        "name": "Uptime"
+      },
+      "display_fw_version": {
+        "name": "Display Firmware Version"
+      },
+      "cc_fw_version": {
+        "name": "CC Firmware Version"
+      },
+      "inv_fw_version": {
+        "name": "Inverter Firmware Version"
+      },
+      "alarm_count": {
+        "name": "Alarm Count",
+        "state_attributes": {
+          "unit_of_measurement": {
+            "alarms": "alarms"
+          }
+        }
+      },
+      "active_alarms": {
+        "name": "Active Alarms",
+        "state": {
+          "none": "None"
+        }
+      },
+      "service_access_until": {
+        "name": "Service Access Until"
+      },
+      "access_level": {
+        "name": "Access Level"
+      },
+      "access_expires_at": {
+        "name": "Access Expires At"
+      }
+    },
+    "select": {
+      "indoor_temperature_target": {
+        "name": "Indoor Target Temperature",
+        "state": {
+          "temp_15c": "15°C",
+          "temp_16c": "16°C",
+          "temp_17c": "17°C",
+          "temp_18c": "18°C",
+          "temp_19c": "19°C",
+          "temp_20c": "20°C",
+          "temp_21c": "21°C",
+          "temp_22c": "22°C",
+          "temp_23c": "23°C",
+          "temp_24c": "24°C",
+          "temp_25c": "25°C"
+        }
+      },
+      "smartcontrol": {
+        "name": "SmartControl",
+        "state": {
+          "off": "Off",
+          "eco": "Eco",
+          "balanced": "Balanced",
+          "comfort": "Comfort"
+        }
+      },
+      "tap_water_capacity_target": {
+        "name": "Tap Water Capacity Target"
+      },
+      "dhw_priority": {
+        "name": "DHW Priority",
+        "state": {
+          "normal_30min": "Normal (30 Minutes)",
+          "plus_1h": "+ (1 Hour)",
+          "plus_plus_2h": "++ (2 Hours)"
+        }
+      },
+      "dhw_mode": {
+        "name": "DHW Mode",
+        "state": {
+          "eco": "Eco",
+          "normal": "Normal",
+          "extra": "Extra"
+        }
+      },
+      "operation_mode": {
+        "name": "Operation Mode",
+        "state": {
+          "auto": "Auto",
+          "manual": "Manual",
+          "additional_heat_only": "Additional heat only"
+        }
+      },
+      "dhw_out_temp": {
+        "name": "DHW outlet temperature",
+        "state": {
+          "normal_52c": "Normal (52°C)",
+          "hot_55c": "Hot (55°C)",
+          "very_hot_58c": "Very Hot (58°C)"
+        }
+      },
+      "room_comp_factor": {
+        "name": "Room Compensation Factor",
+        "state": {
+          "none": "No compensation",
+          "minimum": "Minimum (0.5)",
+          "normal": "Normal (1)",
+          "maximum": "Maximum (2)"
+        }
+      },
+      "heating_curve_shift": {
+        "name": "Heating Curve Shift",
+        "state": {
+          "minus_9": "-9 (Much cooler)",
+          "minus_8": "-8",
+          "minus_7": "-7",
+          "minus_6": "-6",
+          "minus_5": "-5",
+          "minus_4": "-4",
+          "minus_3": "-3",
+          "minus_2": "-2",
+          "minus_1": "-1",
+          "zero": "0 (Normal)",
+          "plus_1": "+1",
+          "plus_2": "+2",
+          "plus_3": "+3",
+          "plus_4": "+4",
+          "plus_5": "+5",
+          "plus_6": "+6",
+          "plus_7": "+7",
+          "plus_8": "+8",
+          "plus_9": "+9 (Much warmer)"
+        }
+      },
+      "sensor_mode": {
+        "name": "Sensor Mode",
+        "state": {
+          "off": "Off",
+          "bt2": "BT2 (Indoor sensor)",
+          "bt3": "BT3 (Flow sensor)",
+          "btx": "BTX (External sensor)"
+        }
+      }
+    },
+    "switch": {
+      "extra_hot_water": {
+        "name": "Extra Hot Water"
+      },
+      "smart_control_heating": {
+        "name": "SmartControl Heating"
+      },
+      "smart_control_dhw": {
+        "name": "SmartControl DHW"
+      },
+      "manual_dhw": {
+        "name": "Manual: DHW"
+      },
+      "manual_additional_heat": {
+        "name": "Manual: Additional Heat"
+      },
+      "manual_cooling": {
+        "name": "Manual: Cooling"
+      },
+      "vacation_mode": {
+        "name": "Vacation Mode"
+      },
+      "auto_elevate_access": {
+        "name": "Auto-Elevate Access"
+      }
+    },
+    "button": {
+      "extra_hot_water_1h": {
+        "name": "Extra Hot Water 1 Hour"
+      },
+      "refresh_sensors": {
+        "name": "Refresh Sensors"
+      },
+      "elevate_access_level": {
+        "name": "Elevate Access Level"
+      }
+    },
+    "binary_sensor": {
+      "additional_power_l1": {
+        "name": "Additional power L1"
+      },
+      "additional_power_l2": {
+        "name": "Additional power L2"
+      },
+      "additional_power_l3": {
+        "name": "Additional power L3"
+      },
+      "diverting_valve": {
+        "name": "Diverting valve DHW/heating"
+      },
+      "enable_sc_dhw": {
+        "name": "SmartControl: DHW"
+      },
+      "enable_sc_sh": {
+        "name": "SmartControl: Heating"
+      },
+      "use_adaptive": {
+        "name": "SmartControl"
+      },
+      "cooling_enabled": {
+        "name": "Cooling enabled"
+      },
+      "connectivity": {
+        "name": "Connectivity"
+      },
+      "service_access": {
+        "name": "Service Access"
+      },
+      "alarm_state": {
+        "name": "Alarm State"
+      }
+    }
+  }
+}
