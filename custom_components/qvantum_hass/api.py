@@ -46,10 +46,10 @@ class ApiConnectionError(QvantumApiError):
 
 class QvantumApi:
     """Client for Qvantum API communication.
-    
+
     This class handles all communication with the Qvantum cloud API,
     including authentication, token management, and device operations.
-    
+
     Attributes:
         email: User email for authentication
         password: User password for authentication
@@ -73,7 +73,7 @@ class QvantumApi:
         token_server: str = DEFAULT_TOKEN_SERVER,
     ) -> None:
         """Initialize the API client.
-        
+
         Args:
             email: User email address
             password: User password
@@ -133,10 +133,9 @@ class QvantumApi:
             response.raise_for_status()
             return response.json()
         except requests.exceptions.Timeout as err:
-            _LOGGER.error("Timeout while making request to %s", url)
+            _LOGGER.debug("Timeout while making request to %s", url)
             raise ApiConnectionError(f"Request timeout: {err}") from err
         except requests.exceptions.RequestException as err:
-            _LOGGER.error("Request failed: %s", err)
             if (
                 hasattr(err, "response")
                 and err.response
@@ -148,9 +147,12 @@ class QvantumApi:
                 and err.response
                 and err.response.status_code >= 500
             ):
+                _LOGGER.debug("Transient server error: %s", err)
                 raise ApiConnectionError(
                     f"Server error {err.response.status_code}"
                 ) from err
+            # Non-transient error - log as warning
+            _LOGGER.warning("Request failed: %s", err)
             raise QvantumApiError(f"API error: {err}") from err
 
     def _get_internal_request(self, endpoint: str) -> Any:
@@ -170,10 +172,9 @@ class QvantumApi:
             response.raise_for_status()
             return response.json()
         except requests.exceptions.Timeout as err:
-            _LOGGER.error("Timeout while making internal request to %s", url)
+            _LOGGER.debug("Timeout while making internal request to %s", url)
             raise ApiConnectionError(f"Request timeout: {err}") from err
         except requests.exceptions.RequestException as err:
-            _LOGGER.error("Internal request failed: %s", err)
             if (
                 hasattr(err, "response")
                 and err.response
@@ -185,9 +186,12 @@ class QvantumApi:
                 and err.response
                 and err.response.status_code >= 500
             ):
+                _LOGGER.debug("Transient internal server error: %s", err)
                 raise ApiConnectionError(
                     f"Internal server error {err.response.status_code}"
                 ) from err
+            # Non-transient error - log as warning
+            _LOGGER.warning("Internal request failed: %s", err)
             raise QvantumApiError(f"API error: {err}") from err
 
     def _patch_request(self, endpoint: str, data: dict) -> Any:
@@ -207,10 +211,10 @@ class QvantumApi:
             response.raise_for_status()
             return response.json()
         except requests.exceptions.Timeout as err:
-            _LOGGER.error("Timeout while making PATCH request to %s", url)
+            _LOGGER.warning("Timeout while making PATCH request to %s", url)
             raise ApiConnectionError(f"Request timeout: {err}") from err
         except requests.exceptions.RequestException as err:
-            _LOGGER.error("PATCH request failed: %s", err)
+            _LOGGER.warning("PATCH request failed: %s", err)
             if (
                 hasattr(err, "response")
                 and err.response
@@ -247,10 +251,10 @@ class QvantumApi:
                 return response.json()
             return {}
         except requests.exceptions.Timeout as err:
-            _LOGGER.error("Timeout while making POST request to %s", url)
+            _LOGGER.warning("Timeout while making POST request to %s", url)
             raise ApiConnectionError(f"Request timeout: {err}") from err
         except requests.exceptions.RequestException as err:
-            _LOGGER.error("POST request failed: %s", err)
+            _LOGGER.warning("POST request failed: %s", err)
             if (
                 hasattr(err, "response")
                 and err.response

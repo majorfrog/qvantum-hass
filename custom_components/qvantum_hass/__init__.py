@@ -407,16 +407,17 @@ class QvantumDataUpdateCoordinator(DataUpdateCoordinator):
                     or "503" in error_msg
                     or "500" in error_msg
                 ):
-                    _LOGGER.warning(
+                    _LOGGER.debug(
                         "Transient server error fetching fast metrics for %s (entities will retain previous values): %s",
                         self.device_id,
                         err,
                     )
                     raise UpdateFailed(f"Transient server error: {err}") from err
-                # For other errors, log but don't fail the update
-                _LOGGER.error(
-                    "Error fetching fast metrics for %s: %s", self.device_id, err
-                )
+                else:
+                    # For other errors, log but don't fail the update
+                    _LOGGER.debug(
+                        "Error fetching fast metrics for %s: %s", self.device_id, err
+                    )
             return data
 
         # Normal coordinator fetches all data
@@ -494,14 +495,14 @@ class QvantumDataUpdateCoordinator(DataUpdateCoordinator):
                 or "503" in error_msg
                 or "500" in error_msg
             ):
-                _LOGGER.warning(
+                _LOGGER.debug(
                     "Transient server error fetching internal metrics for %s (entities will retain previous values): %s",
                     self.device_id,
                     err,
                 )
                 raise UpdateFailed(f"Transient server error: {err}") from err
-            # For other errors, log but don't fail the update
-            _LOGGER.error(
+            # For other errors, log at debug level to avoid log spam
+            _LOGGER.debug(
                 "Error fetching internal metrics for %s: %s", self.device_id, err
             )
 
@@ -534,7 +535,7 @@ class QvantumDataUpdateCoordinator(DataUpdateCoordinator):
                             ],  # Truncate long descriptions
                         )
             except QvantumApiError as err:
-                _LOGGER.error(
+                _LOGGER.debug(
                     "Error fetching settings inventory for %s: %s", self.device_id, err
                 )
                 self._settings_inventory = None
@@ -557,7 +558,7 @@ class QvantumDataUpdateCoordinator(DataUpdateCoordinator):
                             metric,
                         )
             except QvantumApiError as err:
-                _LOGGER.error(
+                _LOGGER.debug(
                     "Error fetching metrics inventory for %s: %s", self.device_id, err
                 )
                 self._metrics_inventory = None
@@ -569,7 +570,7 @@ class QvantumDataUpdateCoordinator(DataUpdateCoordinator):
             alarms = self.api.get_alarms(self.device_id)
             data["alarms"] = alarms
         except QvantumApiError as err:
-            _LOGGER.error("Error fetching alarms for %s: %s", self.device_id, err)
+            _LOGGER.debug("Error fetching alarms for %s: %s", self.device_id, err)
             data["alarms"] = {"alarms": []}
 
         # Get alarms inventory (cached, only needs to be fetched once)
@@ -577,7 +578,7 @@ class QvantumDataUpdateCoordinator(DataUpdateCoordinator):
             try:
                 self._alarms_inventory = self.api.get_alarms_inventory(self.device_id)
             except QvantumApiError as err:
-                _LOGGER.error(
+                _LOGGER.debug(
                     "Error fetching alarms inventory for %s: %s", self.device_id, err
                 )
                 self._alarms_inventory = None
@@ -624,7 +625,7 @@ class QvantumDataUpdateCoordinator(DataUpdateCoordinator):
                                     new_access.get("expiresAt"),
                                 )
                         except QvantumApiError as elevate_err:
-                            _LOGGER.warning(
+                            _LOGGER.debug(
                                 "Failed to re-elevate access: %s", elevate_err
                             )
                 except (ValueError, AttributeError) as parse_err:
