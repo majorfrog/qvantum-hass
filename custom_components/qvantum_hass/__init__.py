@@ -24,10 +24,7 @@ from homeassistant.const import CONF_EMAIL, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import ConfigEntryNotReady
 from homeassistant.helpers.storage import Store
-from homeassistant.helpers.update_coordinator import (
-    DataUpdateCoordinator,
-    UpdateFailed,
-)
+from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
 from .api import AuthenticationError, QvantumApi, QvantumApiError
 from .const import (
@@ -398,8 +395,7 @@ class QvantumDataUpdateCoordinator(DataUpdateCoordinator):
                     data["internal_metrics"],
                 )
             except QvantumApiError as err:
-                # Raise UpdateFailed to preserve entity values on transient errors
-                # This prevents entities from becoming 'unknown' during server issues
+                # For transient server errors, keep previous data to avoid entities becoming unavailable
                 error_msg = str(err)
                 if (
                     "Server error" in error_msg
@@ -408,11 +404,13 @@ class QvantumDataUpdateCoordinator(DataUpdateCoordinator):
                     or "500" in error_msg
                 ):
                     _LOGGER.debug(
-                        "Transient server error fetching fast metrics for %s (entities will retain previous values): %s",
+                        "Transient server error fetching fast metrics for %s, keeping previous values: %s",
                         self.device_id,
                         err,
                     )
-                    raise UpdateFailed(f"Transient server error: {err}") from err
+                    # Return previous data if available, otherwise empty
+                    if self.data and "internal_metrics" in self.data:
+                        data["internal_metrics"] = self.data["internal_metrics"]
                 else:
                     # For other errors, log but don't fail the update
                     _LOGGER.debug(
@@ -487,7 +485,7 @@ class QvantumDataUpdateCoordinator(DataUpdateCoordinator):
                 data["internal_metrics"],
             )
         except QvantumApiError as err:
-            # Raise UpdateFailed for server errors to preserve entity values
+            # For transient server errors, keep previous data to avoid entities becoming unavailable
             error_msg = str(err)
             if (
                 "Server error" in error_msg
@@ -496,15 +494,18 @@ class QvantumDataUpdateCoordinator(DataUpdateCoordinator):
                 or "500" in error_msg
             ):
                 _LOGGER.debug(
-                    "Transient server error fetching internal metrics for %s (entities will retain previous values): %s",
+                    "Transient server error fetching internal metrics for %s, keeping previous values: %s",
                     self.device_id,
                     err,
                 )
-                raise UpdateFailed(f"Transient server error: {err}") from err
-            # For other errors, log at debug level to avoid log spam
-            _LOGGER.debug(
-                "Error fetching internal metrics for %s: %s", self.device_id, err
-            )
+                # Keep previous data if available
+                if self.data and "internal_metrics" in self.data:
+                    data["internal_metrics"] = self.data["internal_metrics"]
+            else:
+                # For other errors, log at debug level to avoid log spam
+                _LOGGER.debug(
+                    "Error fetching internal metrics for %s: %s", self.device_id, err
+                )
 
         # Get settings inventory (cached, only needs to be fetched once)
         if self._settings_inventory is None:
