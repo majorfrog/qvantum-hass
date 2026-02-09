@@ -116,83 +116,97 @@ class QvantumApi:
                 seconds=int(self.tokens["expiresIn"]) - 60
             )
 
+    def _handle_request_exception(
+        self, err: requests.exceptions.RequestException, context: str, is_write: bool
+    ) -> None:
+        """Handle request exceptions with consistent logging and error raising.
+
+        Args:
+            err: The caught exception
+            context: Description for logging (e.g., "GET request to /api/...")
+            is_write: If True, log all errors as warnings (user actions).
+                      If False, only log 4xx client errors as warnings.
+
+        Raises:
+            AuthenticationError: For 401 responses
+            ApiConnectionError: For timeouts, 5xx errors, or connection issues
+            QvantumApiError: For other errors (4xx client errors)
+        """
+        # Check for 401 authentication error
+        if (
+            hasattr(err, "response")
+            and err.response is not None
+            and err.response.status_code == 401
+        ):
+            raise AuthenticationError("Authentication failed") from err
+
+        # Check for 5xx server errors (transient)
+        if (
+            hasattr(err, "response")
+            and err.response is not None
+            and err.response.status_code >= 500
+        ):
+            _LOGGER.debug("Transient server error for %s: %s", context, err)
+            raise ApiConnectionError(
+                f"Server error {err.response.status_code}"
+            ) from err
+
+        # Connection errors without status code (network issues) - transient
+        if not hasattr(err, "response") or err.response is None:
+            _LOGGER.debug("Connection error for %s: %s", context, err)
+            raise ApiConnectionError(f"Connection error: {err}") from err
+
+        # Client errors (4xx) - these are real problems
+        if is_write:
+            # Write operations always warn since user triggered them
+            _LOGGER.warning("%s failed: %s", context, err)
+        else:
+            # Read operations warn on 4xx since they indicate config/API issues
+            _LOGGER.warning("%s failed: %s", context, err)
+        raise QvantumApiError(f"API error: {err}") from err
+
     def _get_request(self, endpoint: str) -> Any:
-        """Make a GET request to the API."""
-        self._ensure_tokens_valid()
-        assert self.tokens is not None, "Tokens should be valid"
-        url = f"{self.api_endpoint}/{endpoint}"
-        headers = {
-            "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.tokens['idToken']}",
-        }
-
-        _LOGGER.debug("Making API request to %s", url)
-
-        try:
-            response = requests.get(url=url, headers=headers, timeout=30)
-            response.raise_for_status()
-            return response.json()
-        except requests.exceptions.Timeout as err:
-            _LOGGER.debug("Timeout while making request to %s", url)
-            raise ApiConnectionError(f"Request timeout: {err}") from err
-        except requests.exceptions.RequestException as err:
-            if (
-                hasattr(err, "response")
-                and err.response
-                and err.response.status_code == 401
-            ):
-                raise AuthenticationError("Authentication failed") from err
-            if (
-                hasattr(err, "response")
-                and err.response
-                and err.response.status_code >= 500
-            ):
-                _LOGGER.debug("Transient server error: %s", err)
-                raise ApiConnectionError(
-                    f"Server error {err.response.status_code}"
-                ) from err
-            # Non-transient error - log as warning
-            _LOGGER.warning("Request failed: %s", err)
-            raise QvantumApiError(f"API error: {err}") from err
+        """Make a GET request to the public API."""
+        return self._do_get_request(endpoint, self.api_endpoint)
 
     def _get_internal_request(self, endpoint: str) -> Any:
         """Make a GET request to the internal API."""
+        return self._do_get_request(endpoint, self.internal_api_endpoint)
+
+    def _do_get_request(self, endpoint: str, base_url: str) -> Any:
+        """Make a GET request to the specified base URL.
+
+        Args:
+            endpoint: API endpoint path
+            base_url: Base URL (api_endpoint or internal_api_endpoint)
+
+        Returns:
+            JSON response data
+
+        Raises:
+            AuthenticationError: For 401 responses
+            ApiConnectionError: For timeouts, 5xx errors, or connection issues
+            QvantumApiError: For other errors
+        """
         self._ensure_tokens_valid()
         assert self.tokens is not None, "Tokens should be valid"
-        url = f"{self.internal_api_endpoint}/{endpoint}"
+        url = f"{base_url}/{endpoint}"
         headers = {
             "Content-Type": "application/json",
             "Authorization": f"Bearer {self.tokens['idToken']}",
         }
 
-        _LOGGER.debug("Making internal API request to %s", url)
+        _LOGGER.debug("Making GET request to %s", url)
 
         try:
             response = requests.get(url=url, headers=headers, timeout=30)
             response.raise_for_status()
             return response.json()
         except requests.exceptions.Timeout as err:
-            _LOGGER.debug("Timeout while making internal request to %s", url)
+            _LOGGER.debug("Timeout for GET %s", url)
             raise ApiConnectionError(f"Request timeout: {err}") from err
         except requests.exceptions.RequestException as err:
-            if (
-                hasattr(err, "response")
-                and err.response
-                and err.response.status_code == 401
-            ):
-                raise AuthenticationError("Authentication failed") from err
-            if (
-                hasattr(err, "response")
-                and err.response
-                and err.response.status_code >= 500
-            ):
-                _LOGGER.debug("Transient internal server error: %s", err)
-                raise ApiConnectionError(
-                    f"Internal server error {err.response.status_code}"
-                ) from err
-            # Non-transient error - log as warning
-            _LOGGER.warning("Internal request failed: %s", err)
-            raise QvantumApiError(f"API error: {err}") from err
+            self._handle_request_exception(err, f"GET {url}", is_write=False)
 
     def _patch_request(self, endpoint: str, data: dict) -> Any:
         """Make a PATCH request to the API."""
@@ -211,25 +225,10 @@ class QvantumApi:
             response.raise_for_status()
             return response.json()
         except requests.exceptions.Timeout as err:
-            _LOGGER.warning("Timeout while making PATCH request to %s", url)
+            _LOGGER.warning("Timeout for PATCH %s", url)
             raise ApiConnectionError(f"Request timeout: {err}") from err
         except requests.exceptions.RequestException as err:
-            _LOGGER.warning("PATCH request failed: %s", err)
-            if (
-                hasattr(err, "response")
-                and err.response
-                and err.response.status_code == 401
-            ):
-                raise AuthenticationError("Authentication failed") from err
-            if (
-                hasattr(err, "response")
-                and err.response
-                and err.response.status_code >= 500
-            ):
-                raise ApiConnectionError(
-                    f"Server error {err.response.status_code}"
-                ) from err
-            raise QvantumApiError(f"API error: {err}") from err
+            self._handle_request_exception(err, f"PATCH {url}", is_write=True)
 
     def _post_request(self, endpoint: str, data: dict) -> Any:
         """Make a POST request to the API."""
@@ -251,25 +250,10 @@ class QvantumApi:
                 return response.json()
             return {}
         except requests.exceptions.Timeout as err:
-            _LOGGER.warning("Timeout while making POST request to %s", url)
+            _LOGGER.warning("Timeout for POST %s", url)
             raise ApiConnectionError(f"Request timeout: {err}") from err
         except requests.exceptions.RequestException as err:
-            _LOGGER.warning("POST request failed: %s", err)
-            if (
-                hasattr(err, "response")
-                and err.response
-                and err.response.status_code == 401
-            ):
-                raise AuthenticationError("Authentication failed") from err
-            if (
-                hasattr(err, "response")
-                and err.response
-                and err.response.status_code >= 500
-            ):
-                raise ApiConnectionError(
-                    f"Server error {err.response.status_code}"
-                ) from err
-            raise QvantumApiError(f"API error: {err}") from err
+            self._handle_request_exception(err, f"POST {url}", is_write=True)
 
     def authenticate(self) -> None:
         """Authenticate with the API server."""

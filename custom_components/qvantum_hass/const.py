@@ -37,8 +37,10 @@ DEFAULT_INTERNAL_API_ENDPOINT: Final = "https://api.qvantum.com"
 DEFAULT_AUTH_SERVER: Final = "https://identitytoolkit.googleapis.com"
 DEFAULT_TOKEN_SERVER: Final = "https://securetoken.googleapis.com"
 
-# Firebase API key
-DEFAULT_API_KEY: Final = "AIzaSyCLQ22XHjH8LmId-PB1DY8FBsN53rWTpFw"
+# Firebase Web API key - Intentionally public
+# Security is enforced by Firebase Security Rules and user authentication (email/password).
+# See: https://firebase.google.com/docs/projects/api-keys
+DEFAULT_API_KEY: Final = "AIzaSyCLQ22XHjH8LmId-PB1DY8FBsN53rWTpFw"  # nosemgrep: generic.secrets.security.detected-generic-secret.detected-generic-secret
 
 # Device information
 MANUFACTURER: Final = "Qvantum"
