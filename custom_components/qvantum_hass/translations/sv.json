@@ -6,8 +6,7 @@
         "description": "Ange dina Qvantum-kontouppgifter",
         "data": {
           "email": "E-post",
-          "password": "Lösenord",
-          "api_key": "API-nyckel (valfritt)"
+          "password": "Lösenord"
         }
       }
     },
@@ -235,7 +234,35 @@
         "name": "Guide önskad temperatur"
       },
       "guide_he": {
-        "name": "Guide uppvärmning"
+        "name": "Värmeavgivare",
+        "state": {
+          "underfloor_heating": "Golvvärme",
+          "radiators": "Radiatorer"
+        }
+      },
+      "btxconfig": {
+        "name": "BTX-konfiguration",
+        "state": {
+          "undef_ntc_10k": "Odefinierad (NTC 10k)",
+          "pool_ntc_10k": "Pool (NTC 10k)",
+          "sg_ready_a": "SG Ready A"
+        }
+      },
+      "bt4config": {
+        "name": "BT4-konfiguration",
+        "state": {
+          "undef_ntc_10k": "Odefinierad (NTC 10k)",
+          "sg_ready_b": "SG Ready B"
+        }
+      },
+      "vacation_start": {
+        "name": "Semesterstart"
+      },
+      "vacation_stop": {
+        "name": "Semesterstopp"
+      },
+      "wifi_ssid": {
+        "name": "Wi-Fi SSID"
       },
       "price_region": {
         "name": "Prisregion"
@@ -363,7 +390,14 @@
         }
       },
       "tap_water_capacity_target": {
-        "name": "Varmvattenkapacitetsmål"
+        "name": "Varmvattenkapacitetsmål",
+        "state": {
+          "1_person": "1 person",
+          "2_persons": "2 personer",
+          "3_persons": "3 personer",
+          "4_persons": "4 personer",
+          "5_persons": "5 personer"
+        }
       },
       "dhw_priority": {
         "name": "VV prioritet",
@@ -430,6 +464,14 @@
           "plus_9": "+9 (Mycket varmare)"
         }
       },
+      "manual_mode": {
+        "name": "Manuellt läge",
+        "state": {
+          "off": "Av",
+          "heating": "Uppvärmning",
+          "cooling": "Kylning"
+        }
+      },
       "sensor_mode": {
         "name": "Givarläge",
         "state": {
@@ -456,11 +498,23 @@
       "manual_additional_heat": {
         "name": "Manuell: Tillskottsvärme"
       },
-      "manual_cooling": {
-        "name": "Manuell: Kyla"
-      },
       "vacation_mode": {
         "name": "Semesterläge"
+      },
+      "cooling_enabled": {
+        "name": "Kyla aktiverad"
+      },
+      "dew_protection": {
+        "name": "Daggpunktsskydd"
+      },
+      "sg_enabled": {
+        "name": "SG Ready"
+      },
+      "btxmounted": {
+        "name": "BTX monterad"
+      },
+      "bt4mounted": {
+        "name": "BT4 monterad"
       },
       "auto_elevate_access": {
         "name": "Auto-höj åtkomst"

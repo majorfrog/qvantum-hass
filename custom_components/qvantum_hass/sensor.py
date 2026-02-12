@@ -43,9 +43,12 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import QvantumDataUpdateCoordinator
 from .const import (
+    BT4_CONFIG_MAP,
+    BTX_CONFIG_MAP,
     DISABLED_BY_DEFAULT_SENSORS,
     DOMAIN,
     FAST_POLLING_METRICS,
+    GUIDE_HE_MAP,
     HP_STATUS_MAP,
     METRIC_INFO,
     OP_MODE_MAP,
@@ -175,6 +178,21 @@ async def async_setup_entry(
             ]
         )
 
+        # Add settings-based read-only sensors
+        entities.extend(
+            [
+                QvantumSettingsEnumSensor(
+                    coordinator, device, "btxconfig", BTX_CONFIG_MAP
+                ),
+                QvantumSettingsEnumSensor(
+                    coordinator, device, "bt4config", BT4_CONFIG_MAP
+                ),
+                QvantumSettingsTimestampSensor(coordinator, device, "vacation_start"),
+                QvantumSettingsTimestampSensor(coordinator, device, "vacation_stop"),
+                QvantumSettingsTextSensor(coordinator, device, "wifi_ssid"),
+            ]
+        )
+
     async_add_entities(entities)
 
 
@@ -224,6 +242,10 @@ class QvantumInternalMetricSensor(QvantumSensorBase):
         elif metric_name == "op_mode_sensor":
             self._attr_device_class = SensorDeviceClass.ENUM
             self._attr_options = list(OP_MODE_SENSOR_MAP.values())
+        elif metric_name == "guide_he":
+            self._attr_device_class = SensorDeviceClass.ENUM
+            self._attr_options = list(GUIDE_HE_MAP.values())
+            self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
         # Only set state_class for numeric sensors (those with a unit)
         # Non-numeric sensors (like price_region with unit=None) should not have state_class
@@ -276,6 +298,8 @@ class QvantumInternalMetricSensor(QvantumSensorBase):
                 return OP_MODE_MAP.get(int(raw_value), raw_value)
             elif self._metric_name == "op_mode_sensor" and raw_value is not None:
                 return OP_MODE_SENSOR_MAP.get(int(raw_value), raw_value)
+            elif self._metric_name == "guide_he" and raw_value is not None:
+                return GUIDE_HE_MAP.get(int(raw_value), raw_value)
 
             return raw_value
         return None
@@ -541,3 +565,120 @@ class QvantumAccessExpireSensor(QvantumEntity, SensorEntity):
             and "access_level" in self.coordinator.data
             and self.coordinator.data["access_level"].get("expiresAt") is not None
         )
+
+
+class QvantumSettingsEnumSensor(QvantumEntity, SensorEntity):
+    """Read-only enum sensor for settings like btxconfig, bt4config."""
+
+    def __init__(
+        self,
+        coordinator: QvantumDataUpdateCoordinator,
+        device: dict[str, Any],
+        setting_name: str,
+        value_map: dict[int, str],
+    ) -> None:
+        """Initialize the settings enum sensor."""
+        super().__init__(coordinator, device, None)
+        self._setting_name = setting_name
+        self._value_map = value_map
+        self._attr_translation_key = setting_name
+        self._attr_unique_id = f"qvantum_{device['id']}_{setting_name}"
+        self._attr_device_class = SensorDeviceClass.ENUM
+        self._attr_options = list(value_map.values())
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the current value mapped to a human-readable string."""
+        if (
+            self.coordinator.data
+            and "settings" in self.coordinator.data
+            and "settings" in self.coordinator.data["settings"]
+        ):
+            for setting in self.coordinator.data["settings"]["settings"]:
+                if setting["name"] == self._setting_name:
+                    value = setting.get("value")
+                    if value is not None:
+                        try:
+                            return self._value_map.get(int(value))
+                        except (ValueError, TypeError):
+                            _LOGGER.warning(
+                                "Could not convert %s value %s to int",
+                                self._setting_name,
+                                value,
+                            )
+        return None
+
+
+class QvantumSettingsTimestampSensor(QvantumEntity, SensorEntity):
+    """Read-only timestamp sensor for settings like vacation_start/stop."""
+
+    def __init__(
+        self,
+        coordinator: QvantumDataUpdateCoordinator,
+        device: dict[str, Any],
+        setting_name: str,
+    ) -> None:
+        """Initialize the settings timestamp sensor."""
+        super().__init__(coordinator, device, None)
+        self._setting_name = setting_name
+        self._attr_translation_key = setting_name
+        self._attr_unique_id = f"qvantum_{device['id']}_{setting_name}"
+        self._attr_device_class = SensorDeviceClass.TIMESTAMP
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    @property
+    def native_value(self) -> datetime | None:
+        """Return the timestamp value."""
+        if (
+            self.coordinator.data
+            and "settings" in self.coordinator.data
+            and "settings" in self.coordinator.data["settings"]
+        ):
+            for setting in self.coordinator.data["settings"]["settings"]:
+                if setting["name"] == self._setting_name:
+                    value = setting.get("value")
+                    if value is not None and value != "":
+                        try:
+                            return datetime.fromisoformat(
+                                str(value).replace("Z", "+00:00")
+                            )
+                        except (ValueError, AttributeError):
+                            _LOGGER.debug(
+                                "Could not parse %s timestamp: %s",
+                                self._setting_name,
+                                value,
+                            )
+        return None
+
+
+class QvantumSettingsTextSensor(QvantumEntity, SensorEntity):
+    """Read-only text sensor for settings like wifi_ssid."""
+
+    def __init__(
+        self,
+        coordinator: QvantumDataUpdateCoordinator,
+        device: dict[str, Any],
+        setting_name: str,
+    ) -> None:
+        """Initialize the settings text sensor."""
+        super().__init__(coordinator, device, None)
+        self._setting_name = setting_name
+        self._attr_translation_key = setting_name
+        self._attr_unique_id = f"qvantum_{device['id']}_{setting_name}"
+        self._attr_entity_category = EntityCategory.DIAGNOSTIC
+
+    @property
+    def native_value(self) -> str | None:
+        """Return the text value."""
+        if (
+            self.coordinator.data
+            and "settings" in self.coordinator.data
+            and "settings" in self.coordinator.data["settings"]
+        ):
+            for setting in self.coordinator.data["settings"]["settings"]:
+                if setting["name"] == self._setting_name:
+                    value = setting.get("value")
+                    if value is not None:
+                        return str(value)
+        return None

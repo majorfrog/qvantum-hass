@@ -434,7 +434,6 @@ automation:
 4. Enter your Qvantum account credentials:
    - **Email**: Your Qvantum account email
    - **Password**: Your Qvantum account password
-   - **API Key** (optional): The default API key is pre-filled, leave as-is unless instructed by Qvantum
 
 The integration will automatically discover all heat pumps associated with your account.
 

@@ -4,6 +4,7 @@ This module provides select entities for choosing from predefined options:
 - Indoor temperature target (15-25°C)
 - SmartControl mode (Off, Eco, Balanced, Comfort)
 - Operation mode (Auto, Manual, Additional Heat Only)
+- Manual mode (Off, Heating, Cooling)
 - DHW priority time selection
 - DHW outlet temperature selection
 - Tap water capacity targets
@@ -35,9 +36,11 @@ from .const import (
     HOT_WATER_PRIORITY_MAP,
     HOT_WATER_TEMP_MAP,
     INDOOR_TEMP_TARGET_MAP,
+    MAN_MODE_MAP,
     OP_MODE_MAP,
     ROOM_COMP_MAP,
     SENSOR_MODE_OPTIONS,
+    TAP_WATER_CAPACITY_MAP,
 )
 from .entity import QvantumEntity
 
@@ -118,6 +121,15 @@ async def async_setup_entry(
         # Add Operation Mode select entity
         entities.append(
             QvantumOperationModeSelect(
+                coordinator,
+                device,
+                api,
+            )
+        )
+
+        # Add Manual Mode select entity (off/heating/cooling)
+        entities.append(
+            QvantumManualModeSelect(
                 coordinator,
                 device,
                 api,
@@ -352,7 +364,7 @@ class QvantumTapWaterCapacitySelect(QvantumEntity, SelectEntity):
         self._attr_translation_key = "tap_water_capacity_target"
         self._attr_unique_id = f"qvantum_{device['id']}_tap_water_capacity_target"
         self._attr_icon = "mdi:account-multiple"
-        self._attr_options = ["1", "2", "3", "4", "5"]
+        self._attr_options = list(TAP_WATER_CAPACITY_MAP.values())
         self._attr_entity_category = EntityCategory.CONFIG
         self._attr_entity_registry_enabled_default = (
             "tap_water_capacity_target" in COMMONLY_USED_SELECT_SETTINGS
@@ -373,11 +385,10 @@ class QvantumTapWaterCapacitySelect(QvantumEntity, SelectEntity):
                 if setting.get("name") == "tap_water_capacity_target":
                     value = setting.get("value")
                     if value is not None:
-                        # Convert to string for option matching
+                        # Map numeric value to translation key
                         try:
                             int_value = int(value)
-                            if 1 <= int_value <= 5:
-                                return str(int_value)
+                            return TAP_WATER_CAPACITY_MAP.get(int_value)
                         except (ValueError, TypeError):
                             _LOGGER.warning(
                                 "Invalid tap_water_capacity_target value: %s",
@@ -388,8 +399,18 @@ class QvantumTapWaterCapacitySelect(QvantumEntity, SelectEntity):
 
     async def async_select_option(self, option: str) -> None:
         """Update the current value."""
+        # Reverse lookup: find numeric value from translation key
+        people_count = None
+        for value, key in TAP_WATER_CAPACITY_MAP.items():
+            if key == option:
+                people_count = value
+                break
+
+        if people_count is None:
+            _LOGGER.error("Invalid tap water capacity option: %s", option)
+            return
+
         try:
-            people_count = int(option)
             await self.hass.async_add_executor_job(
                 self._api.set_setting,
                 self._device["id"],
@@ -397,13 +418,13 @@ class QvantumTapWaterCapacitySelect(QvantumEntity, SelectEntity):
                 people_count,
             )
             _LOGGER.info(
-                "Set tap water capacity target to %s people on device %s",
-                option,
+                "Set tap water capacity target to %s person(s) on device %s",
+                people_count,
                 self._device["id"],
             )
             # Request immediate update
             await self.coordinator.async_request_refresh()
-        except (ValueError, QvantumApiError) as err:
+        except QvantumApiError as err:
             _LOGGER.error(
                 "Failed to set tap water capacity target: %s",
                 err,
@@ -604,7 +625,8 @@ class QvantumDHWModeSelect(QvantumEntity, SelectEntity):
             return
 
         try:
-            await self._api.set_setting(
+            await self.hass.async_add_executor_job(
+                self._api.set_setting,
                 self._device["id"],
                 "dhw_mode",
                 value,
@@ -684,7 +706,8 @@ class QvantumOperationModeSelect(QvantumEntity, SelectEntity):
             return
 
         try:
-            await self._api.set_setting(
+            await self.hass.async_add_executor_job(
+                self._api.set_setting,
                 self._device["id"],
                 "op_mode",
                 value,
@@ -701,6 +724,117 @@ class QvantumOperationModeSelect(QvantumEntity, SelectEntity):
                 "Failed to set operation mode: %s",
                 err,
             )
+
+
+class QvantumManualModeSelect(QvantumEntity, SelectEntity):
+    """Select entity for Manual Mode (off/heating/cooling)."""
+
+    def __init__(
+        self,
+        coordinator: QvantumDataUpdateCoordinator,
+        device: dict[str, Any],
+        api: QvantumApi,
+    ) -> None:
+        """Initialize the select entity."""
+        super().__init__(coordinator, device, api)
+        self._attr_translation_key = "manual_mode"
+        self._attr_unique_id = f"qvantum_{device['id']}_manual_mode"
+        self._attr_icon = "mdi:radiator"
+        self._attr_entity_category = EntityCategory.CONFIG
+        self._attr_options = list(MAN_MODE_MAP.values())
+        self._attr_entity_registry_enabled_default = (
+            "man_mode" in COMMONLY_USED_SELECT_SETTINGS
+        )
+
+    @property
+    def current_option(self) -> str | None:
+        """Return the current selected option."""
+        if not self.coordinator.data:
+            return None
+
+        # Try internal_metrics first
+        value = None
+        internal_metrics = self.coordinator.data.get("internal_metrics", {})
+        if internal_metrics:
+            value = internal_metrics.get("man_mode")
+
+        # Fall back to settings
+        if value is None:
+            settings = self.coordinator.data.get("settings", {})
+            if "settings" in settings:
+                for setting in settings["settings"]:
+                    if setting.get("name") == "man_mode":
+                        value = setting.get("value")
+                        break
+
+        if value is None:
+            return None
+
+        try:
+            return MAN_MODE_MAP.get(int(value))
+        except (ValueError, TypeError):
+            return None
+
+    async def async_select_option(self, option: str) -> None:
+        """Change the selected option."""
+        # Reverse map option to value
+        option_map = {v: k for k, v in MAN_MODE_MAP.items()}
+        value = option_map.get(option)
+
+        if value is None:
+            _LOGGER.error("Invalid manual mode option: %s", option)
+            return
+
+        try:
+            await self.hass.async_add_executor_job(
+                self._api.set_setting,
+                self._device["id"],
+                "man_mode",
+                value,
+            )
+            _LOGGER.info(
+                "Set manual mode to %s on device %s",
+                option,
+                self._device["id"],
+            )
+            # Request immediate update
+            await self.coordinator.async_request_refresh()
+        except (ValueError, QvantumApiError) as err:
+            _LOGGER.error(
+                "Failed to set manual mode: %s",
+                err,
+            )
+
+    @property
+    def available(self) -> bool:
+        """Return if entity is available."""
+        if not self.coordinator.last_update_success:
+            return False
+
+        if not self.coordinator.data:
+            return False
+
+        # Only available when operation mode is Manual (value 1)
+        op_mode_value = None
+        internal_metrics = self.coordinator.data.get("internal_metrics", {})
+        if internal_metrics:
+            op_mode_value = internal_metrics.get("op_mode")
+
+        if op_mode_value is None:
+            settings = self.coordinator.data.get("settings", {})
+            if "settings" in settings:
+                for setting in settings["settings"]:
+                    if setting.get("name") == "op_mode":
+                        op_mode_value = setting.get("value")
+                        break
+
+        try:
+            if op_mode_value is not None and int(op_mode_value) != 1:
+                return False
+        except (ValueError, TypeError):
+            return False
+
+        return True
 
 
 class QvantumDHWOutTempSelect(QvantumEntity, SelectEntity):

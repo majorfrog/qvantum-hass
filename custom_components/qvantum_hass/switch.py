@@ -77,15 +77,7 @@ async def async_setup_entry(
 
         # Add Manual Operation Mode sub-switches (only available when operation mode is Manual)
         # Note: Operation mode itself is controlled by select.operation_mode
-        entities.append(
-            QvantumManualOperationSwitch(
-                coordinator,
-                device,
-                api,
-                "man_mode",
-                "mdi:radiator",
-            )
-        )
+        # Note: man_mode is now a select entity (off/heating/cooling)
         entities.append(
             QvantumManualOperationSwitch(
                 coordinator,
@@ -117,6 +109,9 @@ async def async_setup_entry(
                 for setting in settings_inventory["settings"]:
                     # Skip extra_tap_water as we handle it separately
                     if setting.get("name") == "extra_tap_water":
+                        continue
+                    # Skip settings already handled as binary sensors from METRIC_INFO
+                    if setting.get("name") == "cooling_enabled":
                         continue
                     # Skip SmartControl settings as we handle them separately
                     if setting.get("name") in (

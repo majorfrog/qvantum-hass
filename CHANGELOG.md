@@ -5,6 +5,29 @@ All notable changes to the Qvantum Heat Pump integration for Home Assistant will
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.3] - 2026-02-12
+
+### Changed
+
+- **Manual mode**: Converted from switch to select entity with three options: Off, Heating, and Cooling (was previously a simple on/off switch)
+- **Guide heating**: Renamed to "Heat emitter type" and converted to enum sensor with translated states (Underfloor heating / Radiators)
+- **Tap water capacity target**: Now displays proper grammar with "1 person", "2 persons", etc. instead of raw numbers
+
+### Added
+
+- **BTX configuration sensor**: Read-only diagnostic enum sensor showing BTX input configuration (Undefined NTC 10k, Pool NTC 10k, SG Ready A)
+- **BT4 configuration sensor**: Read-only diagnostic enum sensor showing BT4 input configuration (Undefined NTC 10k, SG Ready B)
+- **Vacation start sensor**: Timestamp sensor showing when vacation mode starts
+- **Vacation stop sensor**: Timestamp sensor showing when vacation mode ends
+- **Wi-Fi SSID sensor**: Diagnostic text sensor showing the connected Wi-Fi network name
+- **English translations**: Added missing English translation file (en.json) to ensure proper entity naming in English-language installations
+
+### Fixed
+
+- **DHW mode select**: Fixed blocking API call that could freeze the event loop (now uses `async_add_executor_job`)
+- **Operation mode select**: Fixed same blocking API call issue as DHW mode
+- **Entity naming**: Fixed issue where entities would show as "none" or incomplete names in English installations due to missing translation file
+
 ## [1.0.0] - 2026-01-30
 
 ### Added

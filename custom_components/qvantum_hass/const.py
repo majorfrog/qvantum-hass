@@ -72,6 +72,36 @@ HOT_WATER_PRIORITY_MAP: Final = {
     120: "plus_plus_2h",
 }
 
+TAP_WATER_CAPACITY_MAP: Final = {
+    1: "1_person",
+    2: "2_persons",
+    3: "3_persons",
+    4: "4_persons",
+    5: "5_persons",
+}
+
+MAN_MODE_MAP: Final = {
+    0: "off",
+    1: "heating",
+    2: "cooling",
+}
+
+BTX_CONFIG_MAP: Final = {
+    0: "undef_ntc_10k",
+    1: "pool_ntc_10k",
+    2: "sg_ready_a",
+}
+
+BT4_CONFIG_MAP: Final = {
+    0: "undef_ntc_10k",
+    1: "sg_ready_b",
+}
+
+GUIDE_HE_MAP: Final = {
+    0: "underfloor_heating",
+    1: "radiators",
+}
+
 # Sensor configuration and categorization
 # These sets define which sensors should be created, enabled, or skipped
 # based on their use case and access requirements.
@@ -80,7 +110,6 @@ HOT_WATER_PRIORITY_MAP: Final = {
 # These settings are writable through number, select, or switch entities
 # and should NOT have read-only sensor entities created for them.
 WRITABLE_SETTINGS: Final = {
-    "guide_he",  # Number entity
     "guide_des_temp",  # Number entity
     "op_man_dhw",  # Switch entity
     "op_man_addition",  # Switch entity
@@ -163,6 +192,7 @@ COMMONLY_USED_SELECT_SETTINGS: Final = {
     "smart_control_mode",
     # "dhw_mode",
     "op_mode",
+    "man_mode",
     "tap_water_capacity_target",
     "dhw_priority_time",
     "dhw_out_temp",
@@ -301,7 +331,7 @@ METRIC_INFO: Final = [
     ("heatingpower", "kW", "sensor"),  # Heating Power
     ("cooling_enabled", "bool", "binary_sensor"),  # Cooling enabled
     ("guide_des_temp", "°C", "sensor"),  # Guide desired temperature
-    ("guide_he", "°C", "sensor"),  # Guide heating
+    ("guide_he", None, "sensor"),  # Heat emitter type (0=Underfloor, 1=Radiators)
     ("price_region", None, "sensor"),  # Price region
     ("room_temp_ext", "°C", "sensor"),  # External room temperature
     ("dhwdemand", None, "sensor"),  # DHW demand
