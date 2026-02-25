@@ -120,6 +120,7 @@ WRITABLE_SETTINGS: Final = {
     "tap_water_cap",  # Select entity (Tap Water Capacity)
     "smart_dhw_mode",  # Switch entity (Smart Control DHW)
     "smart_sh_mode",  # Switch entity (Smart Control Heating)
+    "room_comp_factor",  # Select entity (Room Compensation Factor)
     # The DHW start/stop shown in sensors are READ-ONLY actual limits.
     # The writable versions are tap_water_start/stop (number entities).
 }
@@ -361,6 +362,7 @@ METRIC_INFO: Final = [
     ("bp1_temp_20min_filter", "°C", "sensor"),  # BP1 Temp 20min Filter
     ("max_bp2_env", "bar", "sensor"),  # Max BP2 Environment
     ("picpin_mask", None, "sensor"),  # PIC Pin Mask
+    ("room_comp_factor", None, "sensor"),  # Room temperature compensation factor
 ]
 
 # List of metric names for API requests
@@ -371,6 +373,12 @@ METRIC_NAMES: Final = [metric[0] for metric in METRIC_INFO] + [
     "op_man_dhw",
     "op_man_addition",
     "op_man_cooling",
+    "btxconfig",
+    "bt4config",
+    "wifi_ssid",
+    "vacation_start",
+    "vacation_stop",
+    "dhw_mode",
 ]
 
 # Fast polling metrics - power and current sensors that benefit from frequent updates

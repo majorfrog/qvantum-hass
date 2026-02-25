@@ -248,12 +248,12 @@ class QvantumApi:
             # Some endpoints return empty responses (e.g., approve access)
             if response.text:
                 return response.json()
-            return {}
         except requests.exceptions.Timeout as err:
             _LOGGER.warning("Timeout for POST %s", url)
             raise ApiConnectionError(f"Request timeout: {err}") from err
         except requests.exceptions.RequestException as err:
             self._handle_request_exception(err, f"POST {url}", is_write=True)
+        return {}
 
     def authenticate(self) -> None:
         """Authenticate with the API server."""
@@ -432,8 +432,8 @@ class QvantumApi:
         if response and "response" in response:
             setting_response = response["response"].get(setting)
             if setting_response == "permission denied":
-                _LOGGER.warning(
-                    "Permission denied for setting %s on device %s, elevating access...",
+                _LOGGER.debug(
+                    "Permission denied for setting %s on device %s, elevating access",
                     setting,
                     device_id,
                 )
@@ -503,9 +503,7 @@ class QvantumApi:
                     )
 
             if has_permission_denied:
-                _LOGGER.warning(
-                    "Elevating access and retrying SmartControl settings..."
-                )
+                _LOGGER.debug("Elevating access and retrying SmartControl settings")
                 if self.elevate_access(device_id):
                     _LOGGER.info("Access elevated, retrying SmartControl settings")
                     response = self._post_request(path, payload)
@@ -616,7 +614,7 @@ class QvantumApi:
             return access_data
 
         # Access insufficient, elevate it
-        _LOGGER.info("Access level insufficient (%s < 20), elevating...", write_level)
+        _LOGGER.info("Access level insufficient (%s < 20), elevating", write_level)
 
         # Generate access code
         code_data = self._generate_access_code(device_id)
@@ -686,10 +684,10 @@ class QvantumApi:
         try:
             self._post_request(path, {})
             _LOGGER.debug("Successfully claimed grant for device %s", device_id)
-            return True
         except QvantumApiError as err:
             _LOGGER.error("Failed to claim grant: %s", err)
             return False
+        return True
 
     def _approve_access(self, device_id: str, access_code: str) -> bool:
         """Approve an access grant for a device.
@@ -706,10 +704,10 @@ class QvantumApi:
         try:
             self._post_request(path, {})
             _LOGGER.debug("Successfully approved access for device %s", device_id)
-            return True
         except QvantumApiError as err:
             _LOGGER.error("Failed to approve access: %s", err)
             return False
+        return True
 
     def get_alarms(self, device_id: str) -> dict[str, Any]:
         """Get active alarms for a device.

@@ -29,6 +29,7 @@ from homeassistant.components.sensor import (
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import (
     PERCENTAGE,
+    EntityCategory,
     UnitOfElectricCurrent,
     UnitOfEnergy,
     UnitOfFrequency,
@@ -37,7 +38,6 @@ from homeassistant.const import (
     UnitOfTemperature,
     UnitOfVolumeFlowRate,
 )
-from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
@@ -294,11 +294,11 @@ class QvantumInternalMetricSensor(QvantumSensorBase):
             # Map status values to human-readable strings
             if self._metric_name == "hp_status" and raw_value is not None:
                 return HP_STATUS_MAP.get(int(raw_value), raw_value)
-            elif self._metric_name == "op_mode" and raw_value is not None:
+            if self._metric_name == "op_mode" and raw_value is not None:
                 return OP_MODE_MAP.get(int(raw_value), raw_value)
-            elif self._metric_name == "op_mode_sensor" and raw_value is not None:
+            if self._metric_name == "op_mode_sensor" and raw_value is not None:
                 return OP_MODE_SENSOR_MAP.get(int(raw_value), raw_value)
-            elif self._metric_name == "guide_he" and raw_value is not None:
+            if self._metric_name == "guide_he" and raw_value is not None:
                 return GUIDE_HE_MAP.get(int(raw_value), raw_value)
 
             return raw_value
@@ -361,7 +361,7 @@ class QvantumServiceAccessUntilSensor(QvantumSensorBase):
             if until:
                 try:
                     # Parse ISO format timestamp to datetime
-                    return datetime.fromisoformat(until.replace("Z", "+00:00"))
+                    return datetime.fromisoformat(until)
                 except (ValueError, AttributeError):
                     return None
         return None
@@ -551,7 +551,7 @@ class QvantumAccessExpireSensor(QvantumEntity, SensorEntity):
             if expires_at_str:
                 try:
                     # Parse ISO format timestamp
-                    return datetime.fromisoformat(expires_at_str.replace("Z", "+00:00"))
+                    return datetime.fromisoformat(expires_at_str)
                 except (ValueError, AttributeError):
                     return None
         return None
@@ -590,23 +590,17 @@ class QvantumSettingsEnumSensor(QvantumEntity, SensorEntity):
     @property
     def native_value(self) -> str | None:
         """Return the current value mapped to a human-readable string."""
-        if (
-            self.coordinator.data
-            and "settings" in self.coordinator.data
-            and "settings" in self.coordinator.data["settings"]
-        ):
-            for setting in self.coordinator.data["settings"]["settings"]:
-                if setting["name"] == self._setting_name:
-                    value = setting.get("value")
-                    if value is not None:
-                        try:
-                            return self._value_map.get(int(value))
-                        except (ValueError, TypeError):
-                            _LOGGER.warning(
-                                "Could not convert %s value %s to int",
-                                self._setting_name,
-                                value,
-                            )
+        if self.coordinator.data and "internal_metrics" in self.coordinator.data:
+            value = self.coordinator.data["internal_metrics"].get(self._setting_name)
+            if value is not None:
+                try:
+                    return self._value_map.get(int(value))
+                except (ValueError, TypeError):
+                    _LOGGER.warning(
+                        "Could not convert %s value %s to int",
+                        self._setting_name,
+                        value,
+                    )
         return None
 
 
@@ -628,27 +622,28 @@ class QvantumSettingsTimestampSensor(QvantumEntity, SensorEntity):
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
+    def available(self) -> bool:
+        """Return False when value is 0 or empty string (no date set)."""
+        if self.coordinator.data and "internal_metrics" in self.coordinator.data:
+            value = self.coordinator.data["internal_metrics"].get(self._setting_name)
+            if value in {0, ""}:
+                return False
+        return self.coordinator.last_update_success
+
+    @property
     def native_value(self) -> datetime | None:
         """Return the timestamp value."""
-        if (
-            self.coordinator.data
-            and "settings" in self.coordinator.data
-            and "settings" in self.coordinator.data["settings"]
-        ):
-            for setting in self.coordinator.data["settings"]["settings"]:
-                if setting["name"] == self._setting_name:
-                    value = setting.get("value")
-                    if value is not None and value != "":
-                        try:
-                            return datetime.fromisoformat(
-                                str(value).replace("Z", "+00:00")
-                            )
-                        except (ValueError, AttributeError):
-                            _LOGGER.debug(
-                                "Could not parse %s timestamp: %s",
-                                self._setting_name,
-                                value,
-                            )
+        if self.coordinator.data and "internal_metrics" in self.coordinator.data:
+            value = self.coordinator.data["internal_metrics"].get(self._setting_name)
+            if value is not None and value not in {"", 0}:
+                try:
+                    return datetime.fromisoformat(str(value))
+                except (ValueError, AttributeError):
+                    _LOGGER.warning(
+                        "Could not parse %s timestamp: %s",
+                        self._setting_name,
+                        value,
+                    )
         return None
 
 
@@ -671,14 +666,8 @@ class QvantumSettingsTextSensor(QvantumEntity, SensorEntity):
     @property
     def native_value(self) -> str | None:
         """Return the text value."""
-        if (
-            self.coordinator.data
-            and "settings" in self.coordinator.data
-            and "settings" in self.coordinator.data["settings"]
-        ):
-            for setting in self.coordinator.data["settings"]["settings"]:
-                if setting["name"] == self._setting_name:
-                    value = setting.get("value")
-                    if value is not None:
-                        return str(value)
+        if self.coordinator.data and "internal_metrics" in self.coordinator.data:
+            value = self.coordinator.data["internal_metrics"].get(self._setting_name)
+            if value is not None:
+                return str(value)
         return None

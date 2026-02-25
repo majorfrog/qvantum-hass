@@ -23,11 +23,7 @@ from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import QvantumDataUpdateCoordinator
 from .api import QvantumApiError
-from .const import (
-    COMMONLY_USED_NUMBER_SETTINGS,
-    DOMAIN,
-    SKIP_NUMBER_SETTINGS,
-)
+from .const import COMMONLY_USED_NUMBER_SETTINGS, DOMAIN, SKIP_NUMBER_SETTINGS
 from .entity import QvantumEntity
 
 _LOGGER = logging.getLogger(__name__)

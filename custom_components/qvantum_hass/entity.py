@@ -71,13 +71,12 @@ class QvantumEntity(CoordinatorEntity[QvantumDataUpdateCoordinator]):
         device: dict[str, Any],
         api: Any,
     ) -> None:
-        """Initialize the base Qvantum entity
+        """Initialize the base Qvantum entity.
 
         Args:
             coordinator: Data update coordinator instance.
             device: Device dictionary containing id, serial, model, etc.
             api: Qvantum API instance.
-
         """
         super().__init__(coordinator)
         self._device = device

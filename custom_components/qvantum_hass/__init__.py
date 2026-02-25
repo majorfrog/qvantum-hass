@@ -16,7 +16,7 @@ Key Features:
 
 from __future__ import annotations
 
-from datetime import timedelta
+from datetime import datetime, timedelta
 import logging
 
 from homeassistant.config_entries import ConfigEntry
@@ -162,7 +162,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             await fast_coordinator.async_config_entry_first_refresh()
             _LOGGER.debug("First refresh successful for device %s", device["id"])
         except Exception as err:
-            _LOGGER.error(
+            _LOGGER.warning(
                 "Failed first refresh for device %s: %s",
                 device["id"],
                 err,
@@ -599,12 +599,8 @@ class QvantumDataUpdateCoordinator(DataUpdateCoordinator):
             # Check if elevated access is about to expire (within 5 minutes)
             # Only auto-renew if auto_elevate_enabled is True
             if access_level.get("expiresAt") and self.auto_elevate_enabled:
-                from datetime import datetime
-
                 try:
-                    expires_at = datetime.fromisoformat(
-                        access_level["expiresAt"].replace("Z", "+00:00")
-                    )
+                    expires_at = datetime.fromisoformat(access_level["expiresAt"])
                     now = datetime.now(expires_at.tzinfo)
                     time_until_expiry = (expires_at - now).total_seconds()
 

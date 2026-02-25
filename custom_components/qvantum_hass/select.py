@@ -489,6 +489,7 @@ class QvantumDHWPrioritySelect(QvantumEntity, SelectEntity):
                     # Clear custom value if we're back to a standard value
                     self._current_custom_value = None
                     return HOT_WATER_PRIORITY_MAP[value_int]
+
                 # Custom value detected
                 _LOGGER.warning(
                     "DHW priority time has custom value %s minutes (device %s). "
@@ -511,7 +512,7 @@ class QvantumDHWPrioritySelect(QvantumEntity, SelectEntity):
         # Ignore custom option selection (read-only)
         if option.startswith("Custom ("):
             _LOGGER.warning(
-                "Cannot set custom DHW priority value. Please select a standard option."
+                "Cannot set custom DHW priority value. Please select a standard option"
             )
             return
 
@@ -598,14 +599,20 @@ class QvantumDHWModeSelect(QvantumEntity, SelectEntity):
         if not self.coordinator.data:
             return None
 
-        # Try to get value from settings
+        # Try to get value from internal_metrics first, then settings
         value = None
-        settings = self.coordinator.data.get("settings", {})
-        if "settings" in settings:
-            for setting in settings["settings"]:
-                if setting.get("name") == "dhw_mode":
-                    value = setting.get("value")
-                    break
+
+        internal_metrics = self.coordinator.data.get("internal_metrics", {})
+        if internal_metrics:
+            value = internal_metrics.get("dhw_mode")
+
+        if value is None:
+            settings = self.coordinator.data.get("settings", {})
+            if "settings" in settings:
+                for setting in settings["settings"]:
+                    if setting.get("name") == "dhw_mode":
+                        value = setting.get("value")
+                        break
 
         if value is None:
             return None
@@ -917,7 +924,7 @@ class QvantumDHWOutTempSelect(QvantumEntity, SelectEntity):
         # Ignore custom option selection (read-only)
         if option.startswith("Custom ("):
             _LOGGER.warning(
-                "Cannot set custom DHW outlet temperature. Please select a standard option."
+                "Cannot set custom DHW outlet temperature. Please select a standard option"
             )
             return
 
@@ -995,24 +1002,35 @@ class QvantumRoomCompFactorSelect(QvantumEntity, SelectEntity):
     @property
     def current_option(self) -> str | None:
         """Return the currently selected option."""
-        if (
-            self.coordinator.data
-            and "settings" in self.coordinator.data
+        if not self.coordinator.data:
+            return None
+
+        value = None
+
+        # Try internal_metrics first
+        internal_metrics = self.coordinator.data.get("internal_metrics", {})
+        if internal_metrics:
+            value = internal_metrics.get("room_comp_factor")
+
+        # Fall back to settings
+        if value is None and (
+            "settings" in self.coordinator.data
             and "settings" in self.coordinator.data["settings"]
         ):
             for setting in self.coordinator.data["settings"]["settings"]:
                 if setting["name"] == "room_comp_factor":
                     value = setting.get("value")
-                    if value is not None:
-                        try:
-                            # Convert value to float for comparison
-                            float_value = float(value)
-                            return ROOM_COMP_MAP.get(float_value)
-                        except (ValueError, TypeError):
-                            _LOGGER.warning(
-                                "Could not convert room_comp_factor value %s to float",
-                                value,
-                            )
+                    break
+
+        if value is not None:
+            try:
+                float_value = float(value)
+                return ROOM_COMP_MAP.get(float_value)
+            except (ValueError, TypeError):
+                _LOGGER.warning(
+                    "Could not convert room_comp_factor value %s to float",
+                    value,
+                )
         return None
 
     async def async_select_option(self, option: str) -> None:
