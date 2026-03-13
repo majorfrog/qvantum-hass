@@ -26,11 +26,13 @@ def create_device_info(device: dict[str, Any]) -> DeviceInfo:
         Device info dictionary for entity registration.
 
     """
-    # Pydantic model_dump() → serial_number; raw API fallback → serialNumber
+    # Pydantic model_dump() → serial_number; raw API fallback → serialNumber.
+    # If neither is present the device id is the serial (as observed in prod).
     serial = (
         device.get("serial_number")
         or device.get("serialNumber")
-        or device.get("serial", "")
+        or device.get("serial")
+        or device.get("id", "")
     )
     model = device.get("model", "Heat Pump")
     # Use the user-assigned name from the API when available (unique per household).
