@@ -799,7 +799,10 @@ class QvantumDHWModeSelect(QvantumEntity, SelectEntity):  # pylint: disable=abst
 
         # Map integer value to option
         mode_map = {0: "eco", 1: "normal", 2: "extra"}
-        return mode_map.get(int(value), None)
+        try:
+            return mode_map.get(int(value))
+        except (ValueError, TypeError):
+            return None
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""
@@ -880,7 +883,10 @@ class QvantumOperationModeSelect(QvantumEntity, SelectEntity):  # pylint: disabl
             return None
 
         # Map integer value to option
-        return OP_MODE_MAP.get(int(value), None)
+        try:
+            return OP_MODE_MAP.get(int(value))
+        except (ValueError, TypeError):
+            return None
 
     async def async_select_option(self, option: str) -> None:
         """Change the selected option."""

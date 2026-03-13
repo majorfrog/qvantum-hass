@@ -424,10 +424,15 @@ class QvantumSmartControlSwitch(QvantumEntity, SwitchEntity):  # pylint: disable
             "enable_sc_sh": "smart_control_heating",
             "enable_sc_dhw": "smart_control_dhw",
         }
-        self._attr_translation_key = translation_key_map.get(setting_name, setting_name)
+        translation_key = translation_key_map.get(setting_name, setting_name)
+        self._attr_translation_key = translation_key
         self._attr_unique_id = f"{device['id']}_{setting_name}"
         self._attr_icon = "mdi:leaf"
         self._attr_entity_category = EntityCategory.CONFIG
+        _def = get_entity_def(translation_key)
+        self._attr_entity_registry_enabled_default = (
+            _def.enabled_by_default if _def else True
+        )
 
     @property
     def is_on(self) -> bool | None:
@@ -457,8 +462,7 @@ class QvantumSmartControlSwitch(QvantumEntity, SwitchEntity):  # pylint: disable
                             return value.lower() in ("on", "true", "1", "yes")
                         if isinstance(value, (int, float)):
                             return bool(value)
-        # Return False instead of None to avoid "unknown" state
-        return False
+        return None
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
@@ -572,10 +576,15 @@ class QvantumManualOperationSwitch(QvantumEntity, SwitchEntity):  # pylint: disa
             "op_man_addition": "manual_additional_heat",
             "op_man_cooling": "manual_cooling",
         }
-        self._attr_translation_key = translation_key_map.get(setting_name, setting_name)
+        translation_key = translation_key_map.get(setting_name, setting_name)
+        self._attr_translation_key = translation_key
         self._attr_unique_id = f"{device['id']}_{setting_name}"
         self._attr_icon = icon
         self._attr_entity_category = EntityCategory.CONFIG
+        _def = get_entity_def(translation_key)
+        self._attr_entity_registry_enabled_default = (
+            _def.enabled_by_default if _def else True
+        )
 
     @property
     def is_on(self) -> bool | None:
@@ -606,8 +615,7 @@ class QvantumManualOperationSwitch(QvantumEntity, SwitchEntity):  # pylint: disa
                             return value.lower() in ("on", "true", "1", "yes")
                         if isinstance(value, (int, float)):
                             return value == 1 or bool(value)
-        # Return False instead of None to avoid "unknown" state
-        return False
+        return None
 
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
@@ -673,7 +681,6 @@ class QvantumManualOperationSwitch(QvantumEntity, SwitchEntity):  # pylint: disa
             if self._setting_name in (
                 "op_man_dhw",
                 "op_man_addition",
-                "man_mode",
                 "op_man_cooling",
             ):
                 op_mode_value = None

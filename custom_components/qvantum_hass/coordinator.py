@@ -229,6 +229,7 @@ class QvantumDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
                         self.device_id,
                         err,
                     )
+                    self._apply_backoff(err)
                     # Return previous data if available, otherwise empty
                     if self.data and "internal_metrics" in self.data:
                         data["internal_metrics"] = self.data["internal_metrics"]

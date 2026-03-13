@@ -478,8 +478,6 @@ class QvantumApi:
             # Fallback to unvalidated response for backward compatibility
             devices = response.get("devices", [])
             _LOGGER.info("Found %d device(s) (unvalidated)", len(devices))
-        else:
-            return devices
         return devices
 
     async def get_status(self, device_id: str) -> dict[str, Any]:

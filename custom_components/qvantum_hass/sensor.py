@@ -865,11 +865,20 @@ class QvantumInternalMetricSensor(QvantumSensorBase):
 
             # Map status values to human-readable strings
             if self._metric_name == "hp_status" and raw_value is not None:
-                return HP_STATUS_MAP.get(int(raw_value), raw_value)
+                try:
+                    return HP_STATUS_MAP.get(int(raw_value), raw_value)
+                except (ValueError, TypeError):
+                    return raw_value
             if self._metric_name == "op_mode_sensor" and raw_value is not None:
-                return OP_MODE_SENSOR_MAP.get(int(raw_value), raw_value)
+                try:
+                    return OP_MODE_SENSOR_MAP.get(int(raw_value), raw_value)
+                except (ValueError, TypeError):
+                    return raw_value
             if self._metric_name == "guide_he" and raw_value is not None:
-                return GUIDE_HE_MAP.get(int(raw_value), raw_value)
+                try:
+                    return GUIDE_HE_MAP.get(int(raw_value), raw_value)
+                except (ValueError, TypeError):
+                    return raw_value
 
             return raw_value
         return None
@@ -1025,7 +1034,7 @@ class QvantumActiveAlarmsSensor(QvantumSensorBase):
             ]
 
             return ", ".join(parts) if parts else f"{len(active_alarms)} active"
-        return "Unknown"
+        return None
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
@@ -1139,7 +1148,11 @@ class QvantumAccessExpireSensor(QvantumEntity, SensorEntity):
 
 
 class QvantumSettingsEnumSensor(QvantumEntity, SensorEntity):
-    """Read-only enum sensor for settings like btxconfig, bt4config."""
+    """Read-only enum sensor that reads from internal_metrics (e.g. btxconfig, bt4config).
+
+    Despite the "Settings" prefix these values are returned by the internal-metrics
+    API endpoint, not the settings endpoint.
+    """
 
     def __init__(
         self,
@@ -1176,7 +1189,11 @@ class QvantumSettingsEnumSensor(QvantumEntity, SensorEntity):
 
 
 class QvantumSettingsTimestampSensor(QvantumEntity, SensorEntity):
-    """Read-only timestamp sensor for settings like vacation_start/stop."""
+    """Read-only timestamp sensor that reads from internal_metrics (e.g. vacation_start/stop).
+
+    Despite the "Settings" prefix these values are returned by the internal-metrics
+    API endpoint, not the settings endpoint.
+    """
 
     def __init__(
         self,
@@ -1222,7 +1239,11 @@ class QvantumSettingsTimestampSensor(QvantumEntity, SensorEntity):
 
 
 class QvantumSettingsTextSensor(QvantumEntity, SensorEntity):
-    """Read-only text sensor for settings like wifi_ssid."""
+    """Read-only text sensor that reads from internal_metrics (e.g. wifi_ssid).
+
+    Despite the "Settings" prefix this value is returned by the internal-metrics
+    API endpoint, not the settings endpoint.
+    """
 
     def __init__(
         self,

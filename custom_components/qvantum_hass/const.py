@@ -36,7 +36,9 @@ DEFAULT_FAST_SCAN_INTERVAL: Final = 5  # seconds — fast coordinator (power/cur
 # =============================================================================
 
 DEFAULT_API_ENDPOINT: Final = "https://api.qvantum.com"
-DEFAULT_INTERNAL_API_ENDPOINT: Final = "https://api.qvantum.com"
+# Currently the same as DEFAULT_API_ENDPOINT; update here if Qvantum
+# introduces a separate internal endpoint.
+DEFAULT_INTERNAL_API_ENDPOINT: Final = DEFAULT_API_ENDPOINT
 DEFAULT_AUTH_SERVER: Final = "https://identitytoolkit.googleapis.com"
 DEFAULT_TOKEN_SERVER: Final = "https://securetoken.googleapis.com"
 
