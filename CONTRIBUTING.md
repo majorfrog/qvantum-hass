@@ -224,6 +224,63 @@ Never log sensitive information (passwords, tokens, etc.).
 
 ## Testing
 
+### Automated Tests
+
+The test suite uses the real Home Assistant test infrastructure. Tests must be
+run inside the HA core virtual environment because they import from
+`homeassistant` and `tests.common`.
+
+#### One-time setup
+
+1. **Clone Home Assistant core** (if you haven't already):
+
+   ```bash
+   git clone https://github.com/home-assistant/core.git /workspaces/core
+   cd /workspaces/core
+   pip install uv
+   uv pip install -r requirements_test_all.txt -r requirements.txt
+   ```
+
+2. **Activate the HA virtual environment**:
+
+   ```bash
+   source /home/vscode/.local/ha-venv/bin/activate
+   ```
+
+   > The venv path may differ on your machine. Adjust as needed. You need
+   > to activate it in every new terminal session before running tests.
+
+#### Running the tests
+
+```bash
+# Activate the venv first (required every new terminal session)
+source /home/vscode/.local/ha-venv/bin/activate
+
+# Run all tests from the repo root
+cd /home/vscode/repos/qvantum-hass
+pytest
+
+# Run a specific file
+pytest tests/test_api.py
+
+# Run with verbose output
+pytest -v
+
+# Run with coverage report
+pytest --cov=custom_components.qvantum_hass --cov-report=term-missing
+```
+
+#### Running hassfest (integration structure validation)
+
+`hassfest` checks that the integration structure, manifest, translations, and
+service definitions are all valid:
+
+```bash
+cd /workspaces/core
+python -m script.hassfest \
+  --integration-path /home/vscode/repos/qvantum-hass/custom_components/qvantum_hass
+```
+
 ### Manual Testing
 
 1. **Install in Development Environment**

@@ -12,7 +12,7 @@ for triggering temporary modes or manual operations.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Final
 
 from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
@@ -20,21 +20,59 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import QvantumDataUpdateCoordinator
 from .api import QvantumApiError
-from .const import DOMAIN
+from .coordinator import QvantumDataUpdateCoordinator
 from .entity import QvantumEntity
+from .models import EntitySource, QvantumEntityDef
+
+PARALLEL_UPDATES = 0
+
+# =============================================================================
+# Entity definitions for this platform
+#
+# Each entity is declared once here. definitions.py imports these to
+# build the full cross-platform collection used by the coordinator.
+# =============================================================================
+
+ENTITY_DEFS: Final[list[QvantumEntityDef]] = [
+    # =========================================================================
+    # BUTTON ENTITIES (source: command)
+    # One-shot actions that don't maintain state.
+    # =========================================================================
+    QvantumEntityDef(
+        "extra_hot_water_1h",
+        "Activate extra hot water for 1 hour",
+        source=EntitySource.COMMAND,
+    ),
+    QvantumEntityDef(
+        "refresh_sensors",
+        "Manually refresh all sensor data",
+        source=EntitySource.COMMAND,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    QvantumEntityDef(
+        "elevate_access_level",
+        "Elevate API access to service technician level",
+        source=EntitySource.COMMAND,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+]
 
 _LOGGER = logging.getLogger(__name__)
 
 
+def get_entity_def(key: str) -> QvantumEntityDef | None:
+    """Look up an entity definition by key within this platform's entity definitions."""
+    return next((e for e in ENTITY_DEFS if e.key == key), None)
+
+
 async def async_setup_entry(
-    hass: HomeAssistant,
+    _hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Qvantum button entities."""
-    data = hass.data[DOMAIN][entry.entry_id]
+    data = entry.runtime_data
     coordinators = data["coordinators"]
     devices = data["devices"]
     api = data["api"]
@@ -74,7 +112,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class QvantumExtraHotWaterButton(QvantumEntity, ButtonEntity):
+class QvantumExtraHotWaterButton(QvantumEntity, ButtonEntity):  # pylint: disable=abstract-method
     """Button entity for extra hot water control (1 hour)."""
 
     def __init__(
@@ -86,14 +124,13 @@ class QvantumExtraHotWaterButton(QvantumEntity, ButtonEntity):
         """Initialize the button entity."""
         super().__init__(coordinator, device, api)
         self._attr_translation_key = "extra_hot_water_1h"
-        self._attr_unique_id = f"qvantum_{device['id']}_extra_hot_water_1h"
+        self._attr_unique_id = f"{device['id']}_extra_hot_water_1h"
         self._attr_icon = "mdi:water-boiler-auto"
 
     async def async_press(self) -> None:
         """Handle the button press."""
         try:
-            await self.hass.async_add_executor_job(
-                self._api.set_extra_hot_water,
+            await self._api.set_extra_hot_water(
                 self._device["id"],
                 1,  # 1 hour
                 False,  # Not indefinite
@@ -111,7 +148,7 @@ class QvantumExtraHotWaterButton(QvantumEntity, ButtonEntity):
             )
 
 
-class QvantumRefreshButton(QvantumEntity, ButtonEntity):
+class QvantumRefreshButton(QvantumEntity, ButtonEntity):  # pylint: disable=abstract-method
     """Button entity to refresh sensor data immediately."""
 
     def __init__(
@@ -122,7 +159,7 @@ class QvantumRefreshButton(QvantumEntity, ButtonEntity):
         """Initialize the button entity."""
         super().__init__(coordinator, device, None)
         self._attr_translation_key = "refresh_sensors"
-        self._attr_unique_id = f"qvantum_{device['id']}_refresh"
+        self._attr_unique_id = f"{device['id']}_refresh"
         self._attr_icon = "mdi:refresh"
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -132,7 +169,7 @@ class QvantumRefreshButton(QvantumEntity, ButtonEntity):
         await self.coordinator.async_request_refresh()
 
 
-class QvantumElevateAccessButton(QvantumEntity, ButtonEntity):
+class QvantumElevateAccessButton(QvantumEntity, ButtonEntity):  # pylint: disable=abstract-method
     """Button entity to elevate access level to service technician."""
 
     def __init__(
@@ -144,7 +181,7 @@ class QvantumElevateAccessButton(QvantumEntity, ButtonEntity):
         """Initialize the button entity."""
         super().__init__(coordinator, device, api)
         self._attr_translation_key = "elevate_access_level"
-        self._attr_unique_id = f"qvantum_{device['id']}_elevate_access"
+        self._attr_unique_id = f"{device['id']}_elevate_access"
         self._attr_icon = "mdi:shield-key"
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -152,8 +189,7 @@ class QvantumElevateAccessButton(QvantumEntity, ButtonEntity):
         """Handle the button press - elevate access to service technician level."""
         try:
             _LOGGER.info("Elevating access level for device %s", self._device["id"])
-            result = await self.hass.async_add_executor_job(
-                self._api.elevate_access,
+            result = await self._api.elevate_access(
                 self._device["id"],
             )
             _LOGGER.info(

@@ -8,6 +8,21 @@
           "email": "E-post",
           "password": "Lösenord"
         }
+      },
+      "reauth_confirm": {
+        "title": "Autentisera Qvantum igen",
+        "description": "Dina Qvantum-uppgifter för `{email}` är inte längre giltiga. Ange ditt lösenord för att fortsätta.",
+        "data": {
+          "password": "Lösenord"
+        }
+      },
+      "reconfigure": {
+        "title": "Konfigurera om Qvantum",
+        "description": "Uppdatera dina Qvantum-kontouppgifter",
+        "data": {
+          "email": "E-post",
+          "password": "Lösenord"
+        }
       }
     },
     "error": {
@@ -17,19 +32,36 @@
       "unknown": "Oväntat fel"
     },
     "abort": {
-      "already_configured": "Kontot är redan konfigurerat"
+      "already_configured": "Kontot är redan konfigurerat",
+      "reauth_successful": "Autentiseringen lyckades",
+      "reconfigure_successful": "Omkonfigurationen lyckades",
+      "wrong_account": "Du kan inte byta konto under omkonfiguration"
     }
   },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Qvantum-alternativ",
-        "description": "Konfigurera uppdateringsintervall för sensorer",
-        "data": {
-          "scan_interval": "Normalt uppdateringsintervall (sekunder, 10-300)",
-          "fast_scan_interval": "Snabbt uppdateringsintervall för effekt/ström (sekunder, 5-60)"
-        }
-      }
+  "exceptions": {
+    "service_entry_not_found": {
+      "message": "Konfigurationspost `{entry_id}` hittades inte."
+    },
+    "service_entry_not_loaded": {
+      "message": "Konfigurationspost `{entry_id}` är inte laddad."
+    },
+    "service_device_not_found": {
+      "message": "Enheten `{device_id}` hittades inte i konfigurationspost `{entry_id}`."
+    },
+    "service_unknown_device": {
+      "message": "Ingen laddad Qvantum-konfigurationspost äger enheten `{device_id}`."
+    },
+    "set_access_level_failed": {
+      "message": "Det gick inte att ange åtkomstnivå på enheten."
+    },
+    "toggle_auto_elevate_failed": {
+      "message": "Det gick inte att växla auto-höjning på enheten."
+    },
+    "activate_extra_hot_water_failed": {
+      "message": "Det gick inte att aktivera extra varmvatten på enheten."
+    },
+    "cancel_extra_hot_water_failed": {
+      "message": "Det gick inte att avbryta extra varmvatten på enheten."
     }
   },
   "services": {
@@ -54,6 +86,42 @@
         "device_id": {
           "name": "Enhets-ID",
           "description": "Enhetsidentifieraren"
+        }
+      }
+    },
+    "set_access_level": {
+      "name": "Ange åtkomstnivå",
+      "description": "Anger serviceåtkomstnivå för en specifik enhet",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konfigurationspost-ID",
+          "description": "ID:t för Qvantum-konfigurationsposten som äger enheten"
+        },
+        "device_id": {
+          "name": "Enhets-ID",
+          "description": "Enhetsidentifieraren"
+        },
+        "access_level": {
+          "name": "Åtkomstnivå",
+          "description": "Åtkomstnivån att ange (t.ex. \"service\" eller \"user\")"
+        }
+      }
+    },
+    "toggle_auto_elevate": {
+      "name": "Växla auto-höjning",
+      "description": "Aktiverar eller inaktiverar automatisk höjning av åtkomstnivå för en enhet",
+      "fields": {
+        "config_entry_id": {
+          "name": "Konfigurationspost-ID",
+          "description": "ID:t för Qvantum-konfigurationsposten som äger enheten"
+        },
+        "device_id": {
+          "name": "Enhets-ID",
+          "description": "Enhetsidentifieraren"
+        },
+        "enable": {
+          "name": "Aktivera",
+          "description": "Sätt till true för att aktivera auto-höjning, false för att inaktivera"
         }
       }
     }
@@ -270,27 +338,7 @@
       "room_temp_ext": {
         "name": "Rumstemperatur (extern)"
       },
-      "dhwdemand": {
-        "name": "VV efterfrågan"
-      },
-      "heatingdemand": {
-        "name": "Värmeefterfrågan"
-      },
-      "coolingdemand": {
-        "name": "Kylbehov"
-      },
-      "heatingreleased": {
-        "name": "Värme frigiven"
-      },
-      "coolingreleased": {
-        "name": "Kyla frigiven"
-      },
-      "compressorreleased": {
-        "name": "Kompressor frigiven"
-      },
-      "additionreleased": {
-        "name": "Tillskottsvärme frigiven"
-      },
+
       "dhw_prioritytimeleft": {
         "name": "VV återstående prioritetstid"
       },
@@ -365,7 +413,7 @@
     },
     "select": {
       "indoor_temperature_target": {
-        "name": "Inomhus måltemperatur",
+        "name": "Önskad inomhustemperatur",
         "state": {
           "temp_15c": "15°C",
           "temp_16c": "16°C",
@@ -498,6 +546,9 @@
       "manual_additional_heat": {
         "name": "Manuell: Tillskottsvärme"
       },
+      "manual_cooling": {
+        "name": "Manuell: Kyla"
+      },
       "vacation_mode": {
         "name": "Semesterläge"
       },
@@ -529,6 +580,14 @@
       },
       "elevate_access_level": {
         "name": "Höj åtkomstnivå"
+      }
+    },
+    "number": {
+      "tap_water_start": {
+        "name": "VV starttemperatur"
+      },
+      "tap_water_stop": {
+        "name": "VV stopptemperatur"
       }
     },
     "binary_sensor": {
@@ -564,6 +623,27 @@
       },
       "alarm_state": {
         "name": "Larmtillstånd"
+      },
+      "dhwdemand": {
+        "name": "VV efterfrågan"
+      },
+      "heatingdemand": {
+        "name": "Värmeefterfrågan"
+      },
+      "heatingreleased": {
+        "name": "Värme frigiven"
+      },
+      "additionreleased": {
+        "name": "Tillskottsvärme frigiven"
+      },
+      "coolingdemand": {
+        "name": "Kylbehov"
+      },
+      "coolingreleased": {
+        "name": "Kyla frigiven"
+      },
+      "compressorreleased": {
+        "name": "Kompressor frigiven"
       }
     }
   }

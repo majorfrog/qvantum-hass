@@ -15,29 +15,103 @@ Many are disabled by default to reduce clutter for typical users.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Final
 
 from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
-from homeassistant.core import HomeAssistant
+from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import QvantumDataUpdateCoordinator
 from .api import QvantumApiError
-from .const import COMMONLY_USED_SWITCH_SETTINGS, DOMAIN
+from .coordinator import QvantumDataUpdateCoordinator
 from .entity import QvantumEntity
+from .models import EntitySource, QvantumEntityDef
+
+PARALLEL_UPDATES = 0
+
+# =============================================================================
+# Entity definitions for this platform
+#
+# Each entity is declared once here. definitions.py imports these to
+# build the full cross-platform collection used by the coordinator.
+# =============================================================================
+
+ENTITY_DEFS: Final[list[QvantumEntityDef]] = [
+    # =========================================================================
+    # SWITCH ENTITIES (various sources)
+    # On/off controls for heat pump features and settings.
+    # =========================================================================
+    QvantumEntityDef(
+        "extra_hot_water",
+        "Extra hot water boost (indefinite, via command API)",
+        source=EntitySource.SETTINGS,
+        api_key="extra_tap_water",
+    ),
+    QvantumEntityDef(
+        "smart_control_heating",
+        "SmartControl space heating enable/disable",
+        source=EntitySource.INTERNAL_METRICS,
+        entity_category=EntityCategory.CONFIG,
+        api_key="enable_sc_sh",
+    ),
+    QvantumEntityDef(
+        "smart_control_dhw",
+        "SmartControl DHW enable/disable",
+        source=EntitySource.INTERNAL_METRICS,
+        entity_category=EntityCategory.CONFIG,
+        api_key="enable_sc_dhw",
+    ),
+    QvantumEntityDef(
+        "manual_dhw",
+        "Manual mode: domestic hot water on/off",
+        source=EntitySource.INTERNAL_METRICS,
+        entity_category=EntityCategory.CONFIG,
+        api_key="op_man_dhw",
+    ),
+    QvantumEntityDef(
+        "manual_additional_heat",
+        "Manual mode: additional electric heater on/off",
+        source=EntitySource.INTERNAL_METRICS,
+        entity_category=EntityCategory.CONFIG,
+        api_key="op_man_addition",
+    ),
+    QvantumEntityDef(
+        "manual_cooling",
+        "Manual mode: cooling on/off",
+        source=EntitySource.INTERNAL_METRICS,
+        entity_category=EntityCategory.CONFIG,
+        api_key="op_man_cooling",
+    ),
+    QvantumEntityDef(
+        "vacation_mode",
+        "Vacation mode (reduces heating while away)",
+        source=EntitySource.SETTINGS,
+        api_key="vacation_mode",
+    ),
+    QvantumEntityDef(
+        "auto_elevate_access",
+        "Auto-renew elevated service access",
+        source=EntitySource.COORDINATOR,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+]
 
 _LOGGER = logging.getLogger(__name__)
 
 
+def get_entity_def(key: str) -> QvantumEntityDef | None:
+    """Look up an entity definition by key within this platform's entity definitions."""
+    return next((e for e in ENTITY_DEFS if e.key == key), None)
+
+
 async def async_setup_entry(
-    hass: HomeAssistant,
+    _hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Qvantum switch entities."""
-    data = hass.data[DOMAIN][entry.entry_id]
+    data = entry.runtime_data
     coordinators = data["coordinators"]
     devices = data["devices"]
     api = data["api"]
@@ -75,9 +149,7 @@ async def async_setup_entry(
             )
         )
 
-        # Add Manual Operation Mode sub-switches (only available when operation mode is Manual)
-        # Note: Operation mode itself is controlled by select.operation_mode
-        # Note: man_mode is now a select entity (off/heating/cooling)
+        # Add Manual Operation Mode sub-switches
         entities.append(
             QvantumManualOperationSwitch(
                 coordinator,
@@ -96,59 +168,30 @@ async def async_setup_entry(
                 "mdi:transmission-tower-import",
             )
         )
+        entities.append(
+            QvantumManualOperationSwitch(
+                coordinator,
+                device,
+                api,
+                "op_man_cooling",
+                "mdi:snowflake",
+            )
+        )
 
-        # Add switch entities for boolean settings
-        if coordinator.data and "settings_inventory" in coordinator.data:
-            settings_inventory = coordinator.data["settings_inventory"]
-            if settings_inventory and "settings" in settings_inventory:
-                # Get list of settings that are actually returned by the API
-                available_setting_names = QvantumEntity.get_available_setting_names(
-                    coordinator.data
-                )
-
-                for setting in settings_inventory["settings"]:
-                    # Skip extra_tap_water as we handle it separately
-                    if setting.get("name") == "extra_tap_water":
-                        continue
-                    # Skip settings already handled as binary sensors from METRIC_INFO
-                    if setting.get("name") == "cooling_enabled":
-                        continue
-                    # Skip SmartControl settings as we handle them separately
-                    if setting.get("name") in (
-                        "enable_sc_sh",
-                        "enable_sc_dhw",
-                        "use_adaptive",
-                    ):
-                        continue
-                    # Skip manual operation mode settings as we handle them separately
-                    # Note: op_mode is now only controlled via select.operation_mode
-                    if setting.get("name") in (
-                        "op_mode",
-                        "man_mode",
-                        "op_man_dhw",
-                        "op_man_addition",
-                        "op_man_cooling",
-                    ):
-                        continue
-
-                    # Only create entities for settings that are actually available in API response
-                    if setting.get("name") not in available_setting_names:
-                        _LOGGER.debug(
-                            "Skipping switch entity for %s - not available in settings response",
-                            setting.get("name"),
-                        )
-                        continue
-
-                    if setting.get("data_type") == "boolean" and not setting.get(
-                        "read_only", False
-                    ):
-                        entities.append(
-                            QvantumSwitchEntity(
-                                coordinator,
-                                device,
-                                setting,
-                            )
-                        )
+        # Add settings-based switch entities from entity definitions
+        # (replaces dynamic creation from settings_inventory)
+        entities.extend(
+            QvantumSwitchEntity(
+                coordinator,
+                device,
+                entity_def,
+            )
+            for entity_def in ENTITY_DEFS
+            if (
+                entity_def.source == EntitySource.SETTINGS
+                and entity_def.key not in ("extra_hot_water",)  # Handled above
+            )
+        )
 
         # Add auto-elevate access switch
         entities.append(
@@ -162,29 +205,22 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class QvantumSwitchEntity(QvantumEntity, SwitchEntity):
-    """Switch entity for Qvantum settings."""
+class QvantumSwitchEntity(QvantumEntity, SwitchEntity):  # pylint: disable=abstract-method
+    """Switch entity for Qvantum settings (reads from settings API)."""
 
     def __init__(
         self,
         coordinator: QvantumDataUpdateCoordinator,
         device: dict[str, Any],
-        setting: dict[str, Any],
+        entity_def: QvantumEntityDef,
     ) -> None:
-        """Initialize the switch entity."""
+        """Initialize the switch entity from an entity definition."""
         super().__init__(coordinator, device, None)
-        self._setting = setting
-        self._setting_name = setting["name"]
-        self._attr_translation_key = self._setting_name
-        self._attr_unique_id = f"qvantum_{device['id']}_{self._setting_name}"
-        # Keep vacation_mode in main controls, move others to config
-        if self._setting_name != "vacation_mode":
-            self._attr_entity_category = EntityCategory.CONFIG
-
-        # Commonly-used settings enabled by default, advanced settings disabled
-        self._attr_entity_registry_enabled_default = (
-            self._setting_name in COMMONLY_USED_SWITCH_SETTINGS
-        )
+        self._setting_name = entity_def.api_key or entity_def.key
+        self._attr_translation_key = entity_def.key
+        self._attr_unique_id = f"{device['id']}_{entity_def.key}"
+        self._attr_entity_registry_enabled_default = entity_def.enabled_by_default
+        self._attr_entity_category = entity_def.entity_category
 
     @property
     def is_on(self) -> bool | None:
@@ -210,11 +246,16 @@ class QvantumSwitchEntity(QvantumEntity, SwitchEntity):
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
         try:
-            await self.hass.async_add_executor_job(
-                self.coordinator.api.set_setting,
+            response = await self.coordinator.api.set_setting(
                 self._device["id"],
                 self._setting_name,
-                "on",
+                True,
+            )
+            _LOGGER.debug(
+                "Turn on %s response for device %s: %s",
+                self._setting_name,
+                self._device["id"],
+                response,
             )
             # Request immediate update
             await self.coordinator.async_request_refresh()
@@ -228,11 +269,16 @@ class QvantumSwitchEntity(QvantumEntity, SwitchEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
         try:
-            await self.hass.async_add_executor_job(
-                self.coordinator.api.set_setting,
+            response = await self.coordinator.api.set_setting(
                 self._device["id"],
                 self._setting_name,
-                "off",
+                False,
+            )
+            _LOGGER.debug(
+                "Turn off %s response for device %s: %s",
+                self._setting_name,
+                self._device["id"],
+                response,
             )
             # Request immediate update
             await self.coordinator.async_request_refresh()
@@ -244,7 +290,7 @@ class QvantumSwitchEntity(QvantumEntity, SwitchEntity):
             )
 
 
-class QvantumExtraHotWaterSwitch(QvantumEntity, SwitchEntity):
+class QvantumExtraHotWaterSwitch(QvantumEntity, SwitchEntity):  # pylint: disable=abstract-method
     """Switch entity for extra hot water control."""
 
     def __init__(
@@ -256,43 +302,77 @@ class QvantumExtraHotWaterSwitch(QvantumEntity, SwitchEntity):
         """Initialize the switch entity."""
         super().__init__(coordinator, device, api)
         self._attr_translation_key = "extra_hot_water"
-        self._attr_unique_id = f"qvantum_{device['id']}_extra_hot_water"
+        self._attr_unique_id = f"{device['id']}_extra_hot_water"
         self._attr_icon = "mdi:water-boiler"
+        # _pending_state: set immediately after issuing a command to avoid a
+        # one-cycle flicker while the coordinator hasn't refreshed yet.  It is
+        # cleared on the very next coordinator update so that external changes
+        # (e.g. boost cancelled from the app or another HA session) are
+        # reflected after at most one polling interval.
+        self._pending_state: bool | None = None
+
+    @callback
+    def _handle_coordinator_update(self) -> None:
+        """Clear pending command state on each coordinator refresh.
+
+        Once the coordinator has fetched fresh data from the API the pending
+        state is no longer needed — the real device state is now available.
+        """
+        self._pending_state = None
+        super()._handle_coordinator_update()
 
     @property
     def is_on(self) -> bool | None:
-        """Return true if extra hot water is active."""
-        if (
-            self.coordinator.data
-            and "settings" in self.coordinator.data
-            and "settings" in self.coordinator.data["settings"]
-        ):
-            for setting in self.coordinator.data["settings"]["settings"]:
+        """Return true if extra hot water is active.
+
+        Priority order:
+        1. ``_pending_state`` — set immediately after a command to cover the
+           one coordinator-cycle lag before the API reflects the new state.
+           Cleared on the next coordinator refresh.
+        2. ``extra_tap_water`` from the settings API — the canonical source.
+           Reliably reflects state when using the ``set_additional_hot_water``
+           command API (as opposed to the legacy ``update_settings`` path).
+        4. ``None`` (unknown) if no source has information yet.
+        """
+        # Source 1 – transient command state (covers one coordinator cycle)
+        if self._pending_state is not None:
+            return self._pending_state
+
+        if self.coordinator.data:
+            # Source 2 – settings API (reliable with set_additional_hot_water)
+            for setting in self.coordinator.data.get("settings", {}).get(
+                "settings", []
+            ):
                 if setting["name"] == "extra_tap_water":
                     value = setting.get("value")
-                    if value is not None:
-                        if isinstance(value, bool):
-                            return value
-                        if isinstance(value, str):
-                            return value.lower() in ("on", "true", "1", "yes")
-                        if isinstance(value, (int, float)):
-                            return bool(value)
+                    if isinstance(value, bool):
+                        return value
+                    if isinstance(value, str):
+                        return value.lower() in ("on", "true", "1", "yes")
+                    if isinstance(value, (int, float)):
+                        return bool(value)
+                    break
+
         return None
 
     async def async_turn_on(self, **kwargs: Any) -> None:
-        """Turn on extra hot water indefinitely."""
+        """Turn on extra hot water indefinitely via the command API."""
         try:
-            await self.hass.async_add_executor_job(
-                self._api.set_extra_hot_water,
+            response = await self._api.set_extra_hot_water(
                 self._device["id"],
-                0,  # Hours parameter (ignored when indefinite=True)
-                True,  # Enable indefinitely
+                indefinite=True,
+            )
+            _LOGGER.debug(
+                "Turn on extra hot water (indefinite) response for device %s: %s",
+                self._device["id"],
+                response,
             )
             _LOGGER.info(
                 "Activated extra hot water indefinitely on device %s",
                 self._device["id"],
             )
-            # Request immediate update
+            self._pending_state = True
+            self.async_write_ha_state()
             await self.coordinator.async_request_refresh()
         except QvantumApiError as err:
             _LOGGER.error(
@@ -301,18 +381,23 @@ class QvantumExtraHotWaterSwitch(QvantumEntity, SwitchEntity):
             )
 
     async def async_turn_off(self, **kwargs: Any) -> None:
-        """Turn off extra hot water."""
+        """Cancel extra hot water via the command API."""
         try:
-            await self.hass.async_add_executor_job(
-                self._api.set_extra_hot_water,
+            response = await self._api.set_extra_hot_water(
                 self._device["id"],
-                0,  # Cancel
+                hours=0,
+            )
+            _LOGGER.debug(
+                "Cancel extra hot water response for device %s: %s",
+                self._device["id"],
+                response,
             )
             _LOGGER.info(
                 "Cancelled extra hot water on device %s",
                 self._device["id"],
             )
-            # Request immediate update
+            self._pending_state = False
+            self.async_write_ha_state()
             await self.coordinator.async_request_refresh()
         except QvantumApiError as err:
             _LOGGER.error(
@@ -321,7 +406,7 @@ class QvantumExtraHotWaterSwitch(QvantumEntity, SwitchEntity):
             )
 
 
-class QvantumSmartControlSwitch(QvantumEntity, SwitchEntity):
+class QvantumSmartControlSwitch(QvantumEntity, SwitchEntity):  # pylint: disable=abstract-method
     """Switch entity for SmartControl enable/disable."""
 
     def __init__(
@@ -340,7 +425,7 @@ class QvantumSmartControlSwitch(QvantumEntity, SwitchEntity):
             "enable_sc_dhw": "smart_control_dhw",
         }
         self._attr_translation_key = translation_key_map.get(setting_name, setting_name)
-        self._attr_unique_id = f"qvantum_{device['id']}_{setting_name}"
+        self._attr_unique_id = f"{device['id']}_{setting_name}"
         self._attr_icon = "mdi:leaf"
         self._attr_entity_category = EntityCategory.CONFIG
 
@@ -378,8 +463,7 @@ class QvantumSmartControlSwitch(QvantumEntity, SwitchEntity):
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
         try:
-            await self.hass.async_add_executor_job(
-                self._api.set_setting,
+            await self._api.set_setting(
                 self._device["id"],
                 self._setting_name,
                 True,
@@ -401,8 +485,7 @@ class QvantumSmartControlSwitch(QvantumEntity, SwitchEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
         try:
-            await self.hass.async_add_executor_job(
-                self._api.set_setting,
+            await self._api.set_setting(
                 self._device["id"],
                 self._setting_name,
                 False,
@@ -469,7 +552,7 @@ class QvantumSmartControlSwitch(QvantumEntity, SwitchEntity):
         return True
 
 
-class QvantumManualOperationSwitch(QvantumEntity, SwitchEntity):
+class QvantumManualOperationSwitch(QvantumEntity, SwitchEntity):  # pylint: disable=abstract-method
     """Switch entity for Manual Operation Mode controls."""
 
     def __init__(
@@ -490,7 +573,7 @@ class QvantumManualOperationSwitch(QvantumEntity, SwitchEntity):
             "op_man_cooling": "manual_cooling",
         }
         self._attr_translation_key = translation_key_map.get(setting_name, setting_name)
-        self._attr_unique_id = f"qvantum_{device['id']}_{setting_name}"
+        self._attr_unique_id = f"{device['id']}_{setting_name}"
         self._attr_icon = icon
         self._attr_entity_category = EntityCategory.CONFIG
 
@@ -529,8 +612,7 @@ class QvantumManualOperationSwitch(QvantumEntity, SwitchEntity):
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
         try:
-            await self.hass.async_add_executor_job(
-                self._api.set_setting,
+            await self._api.set_setting(
                 self._device["id"],
                 self._setting_name,
                 1,
@@ -552,8 +634,7 @@ class QvantumManualOperationSwitch(QvantumEntity, SwitchEntity):
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
         try:
-            await self.hass.async_add_executor_job(
-                self._api.set_setting,
+            await self._api.set_setting(
                 self._device["id"],
                 self._setting_name,
                 0,
@@ -633,7 +714,7 @@ class QvantumManualOperationSwitch(QvantumEntity, SwitchEntity):
         return True
 
 
-class QvantumAutoElevateAccessSwitch(QvantumEntity, SwitchEntity):
+class QvantumAutoElevateAccessSwitch(QvantumEntity, SwitchEntity):  # pylint: disable=abstract-method
     """Switch to control automatic access elevation renewal."""
 
     def __init__(
@@ -645,7 +726,7 @@ class QvantumAutoElevateAccessSwitch(QvantumEntity, SwitchEntity):
         """Initialize the switch entity."""
         super().__init__(coordinator, device, api)
         self._attr_translation_key = "auto_elevate_access"
-        self._attr_unique_id = f"qvantum_{device['id']}_auto_elevate_access"
+        self._attr_unique_id = f"{device['id']}_auto_elevate_access"
         self._attr_icon = "mdi:shield-refresh"
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -661,8 +742,7 @@ class QvantumAutoElevateAccessSwitch(QvantumEntity, SwitchEntity):
         _LOGGER.info("Auto-elevate access enabled for device %s", self._device["id"])
         # Immediately elevate access when enabled
         try:
-            await self.hass.async_add_executor_job(
-                self._api.elevate_access,
+            await self._api.elevate_access(
                 self._device["id"],
             )
             _LOGGER.info("Access elevated successfully")

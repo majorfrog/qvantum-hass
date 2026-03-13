@@ -5,6 +5,32 @@ All notable changes to the Qvantum Heat Pump integration for Home Assistant will
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [v1.1.0] - 2026-03-15
+
+### ⚠️ Breaking changes
+
+- **Entity unique IDs have changed** — The redundant `qvantum_` prefix has been removed from
+  every entity unique ID. For example, a sensor previously identified as
+  `qvantum_<device_id>_bt1` is now `<device_id>_bt1`.
+
+  **What this means for you:** After upgrading, Home Assistant will treat all Qvantum entities
+  as new entities because their IDs no longer match the old values. You will lose:
+  - Custom friendly names set through the UI
+  - Area/room assignments
+  - Long‑term history and statistics
+  - Any automations or dashboards that reference entities by entity ID
+    (these will gain a `_2` suffix on the newly created entities)
+
+  **Recommended steps before upgrading:**
+  1. Export or note down any entity customisations, area assignments, or automation references
+     you want to keep.
+  2. After upgrading, re-apply customisations to the new entities.
+  3. Remove the now-orphaned old entities from **Settings → Entities** (filter by
+     integration, sort by "Last seen", and delete any that are no longer updating).
+  4. Update any automations or dashboards that used the old entity IDs.
+
+  There is no automatic migration.
+
 ## [1.0.3] - 2026-02-12
 
 ### Changed

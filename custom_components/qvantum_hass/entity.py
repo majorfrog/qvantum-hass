@@ -7,27 +7,35 @@ from typing import Any
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
-from . import QvantumDataUpdateCoordinator
 from .const import DOMAIN, MANUFACTURER
+from .coordinator import QvantumDataUpdateCoordinator
 
 
 def create_device_info(device: dict[str, Any]) -> DeviceInfo:
     """Create standard device info for Qvantum entities.
 
     Args:
-        device: Device dictionary containing id, serial, model, etc.
+        device: Device dictionary containing id, serial_number, model, etc.
+            The key is ``serial_number`` when the dict comes from Pydantic
+            ``model_dump()``, ``serialNumber`` in raw API fallback responses.
 
     Returns:
         Device info dictionary for entity registration.
 
     """
-    return {
-        "identifiers": {(DOMAIN, device["id"])},
-        "name": f"Qvantum Heat Pump {device['serial']}",
-        "manufacturer": MANUFACTURER,
-        "model": device.get("model", "Heat Pump"),
-        "serial_number": device["serial"],
-    }
+    # Pydantic model_dump() → serial_number; raw API fallback → serialNumber
+    serial = (
+        device.get("serial_number")
+        or device.get("serialNumber")
+        or device.get("serial", "")
+    )
+    return DeviceInfo(
+        identifiers={(DOMAIN, device["id"])},
+        name=f"Qvantum Heat Pump {serial}",
+        manufacturer=MANUFACTURER,
+        model=device.get("model", "Heat Pump"),
+        serial_number=serial or None,
+    )
 
 
 class QvantumEntity(CoordinatorEntity[QvantumDataUpdateCoordinator]):
@@ -41,29 +49,6 @@ class QvantumEntity(CoordinatorEntity[QvantumDataUpdateCoordinator]):
     """
 
     _attr_has_entity_name = True
-
-    @staticmethod
-    def get_available_setting_names(coordinator_data: dict[str, Any]) -> set[str]:
-        """Get list of settings that are actually returned by the API.
-
-        Many settings in the settings_inventory aren't actually readable/writable.
-        This function extracts the names of settings that are available in the
-        actual API response.
-
-        Args:
-            coordinator_data: The coordinator.data dictionary containing settings.
-
-        Returns:
-            Set of available setting names, or empty set if none found.
-
-        """
-        if (
-            coordinator_data
-            and "settings" in coordinator_data
-            and "settings" in coordinator_data["settings"]
-        ):
-            return {s["name"] for s in coordinator_data["settings"]["settings"]}
-        return set()
 
     def __init__(
         self,

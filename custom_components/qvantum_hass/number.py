@@ -13,7 +13,7 @@ safe operation within manufacturer specifications.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Final
 
 from homeassistant.components.number import NumberEntity
 from homeassistant.config_entries import ConfigEntry
@@ -21,21 +21,58 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import QvantumDataUpdateCoordinator
 from .api import QvantumApiError
-from .const import COMMONLY_USED_NUMBER_SETTINGS, DOMAIN, SKIP_NUMBER_SETTINGS
+from .coordinator import QvantumDataUpdateCoordinator
 from .entity import QvantumEntity
+from .models import EntitySource, QvantumEntityDef
+
+PARALLEL_UPDATES = 0
+
+# =============================================================================
+# Entity definitions for this platform
+#
+# Each entity is declared once here. definitions.py imports these to
+# build the full cross-platform collection used by the coordinator.
+# =============================================================================
+
+ENTITY_DEFS: Final[list[QvantumEntityDef]] = [
+    # =========================================================================
+    # NUMBER ENTITIES (source: settings)
+    # Numeric writable settings with min/max/step constraints.
+    # =========================================================================
+    QvantumEntityDef(
+        "tap_water_start",
+        "DHW start temperature (tank heating begins)",
+        source=EntitySource.SETTINGS,
+        unit="°C",
+        entity_category=EntityCategory.CONFIG,
+        enabled_by_default=False,
+    ),
+    QvantumEntityDef(
+        "tap_water_stop",
+        "DHW stop temperature (tank heating stops)",
+        source=EntitySource.SETTINGS,
+        unit="°C",
+        entity_category=EntityCategory.CONFIG,
+        enabled_by_default=False,
+    ),
+]
 
 _LOGGER = logging.getLogger(__name__)
 
 
+def get_entity_def(key: str) -> QvantumEntityDef | None:
+    """Look up an entity definition by key within this platform's entity definitions."""
+    return next((e for e in ENTITY_DEFS if e.key == key), None)
+
+
 async def async_setup_entry(
-    hass: HomeAssistant,
+    _hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Qvantum number entities."""
-    data = hass.data[DOMAIN][entry.entry_id]
+    data = entry.runtime_data
     coordinators = data["coordinators"]
     devices = data["devices"]
 
@@ -45,106 +82,65 @@ async def async_setup_entry(
         device_id = device["id"]
         coordinator = coordinators[device_id]
 
-        # Add number entities for numeric settings
-        if coordinator.data and "settings_inventory" in coordinator.data:
-            settings_inventory = coordinator.data["settings_inventory"]
-            if settings_inventory and "settings" in settings_inventory:
-                # Get list of settings that are actually returned by the API
-                available_setting_names = QvantumEntity.get_available_setting_names(
-                    coordinator.data
-                )
-
-                for setting in settings_inventory["settings"]:
-                    # Skip settings that are handled as select entities
-                    if setting.get("name") in SKIP_NUMBER_SETTINGS:
-                        continue
-
-                    # Only create entities for settings that are actually available in API response
-                    if setting.get("name") not in available_setting_names:
-                        _LOGGER.debug(
-                            "Skipping number entity for %s - not available in settings response",
-                            setting.get("name"),
-                        )
-                        continue
-
-                    if setting.get("data_type") == "number" and not setting.get(
-                        "read_only", False
-                    ):
-                        entities.append(
-                            QvantumNumberEntity(
-                                coordinator,
-                                device,
-                                setting,
-                            )
-                        )
+        # Add number entities from entity definitions
+        # (replaces dynamic creation from settings_inventory)
+        entities.extend(
+            QvantumNumberEntity(
+                coordinator,
+                device,
+                entity_def,
+            )
+            for entity_def in ENTITY_DEFS
+        )
 
     async_add_entities(entities)
 
 
-class QvantumNumberEntity(QvantumEntity, NumberEntity):
+class QvantumNumberEntity(QvantumEntity, NumberEntity):  # pylint: disable=abstract-method
     """Number entity for Qvantum settings."""
 
     def __init__(
         self,
         coordinator: QvantumDataUpdateCoordinator,
         device: dict[str, Any],
-        setting: dict[str, Any],
+        entity_def: QvantumEntityDef,
     ) -> None:
-        """Initialize the number entity."""
+        """Initialize the number entity from an entity definition."""
         super().__init__(coordinator, device, None)
-        self._setting = setting
-        self._setting_name = setting["name"]
-        self._attr_name = setting.get("display_name", setting["name"])
-        self._attr_unique_id = f"qvantum_{device['id']}_{self._setting_name}"
+        self._setting_name = entity_def.api_key or entity_def.key
+        self._attr_translation_key = entity_def.key
+        self._attr_unique_id = f"{device['id']}_{entity_def.key}"
         self._attr_entity_category = EntityCategory.CONFIG
-        self._optimistic_value: float | None = None  # Store optimistic value
+        self._attr_entity_registry_enabled_default = entity_def.enabled_by_default
+        self._optimistic_value: float | None = None
 
-        # Commonly-used settings enabled by default, advanced settings disabled
-        # Note: tap_water_start/stop are disabled because they're managed
-        # automatically by select.tap_water_capacity_target
-        # Note: room_comp_factor is now a select entity
-        self._attr_entity_registry_enabled_default = (
-            self._setting_name in COMMONLY_USED_NUMBER_SETTINGS
-        )
+        # Set unit from entity definition
+        if entity_def.unit == "°C":
+            self._attr_native_unit_of_measurement = "°C"
+        elif entity_def.unit:
+            self._attr_native_unit_of_measurement = entity_def.unit
 
         # Set min, max, and step based on setting name
         self._attr_native_min_value = self._get_min()
         self._attr_native_max_value = self._get_max()
         self._attr_native_step = self._get_step()
 
-        # Get unit from metrics inventory
-        if coordinator.data and "metrics_inventory" in coordinator.data:
-            metrics_inventory = coordinator.data["metrics_inventory"]
-            if metrics_inventory and "metrics" in metrics_inventory:
-                for metric in metrics_inventory["metrics"]:
-                    if metric["name"] == self._setting_name:
-                        self._attr_native_unit_of_measurement = metric.get("unit")
-                        break
-
     def _get_min(self) -> float:
         """Get minimum value for setting."""
         name = self._setting_name
-        if name == "tap_water_capacity_target":
-            return 0
         if name == "tap_water_start":
             return 40
         if name == "tap_water_stop":
             return 40
-        if name == "indoor_temperature_target":
-            return 15
         return 0
 
     def _get_max(self) -> float:
         """Get maximum value for setting."""
         name = self._setting_name
-        if name == "tap_water_capacity_target":
-            return 5
         if name == "tap_water_start":
             return 70
         if name == "tap_water_stop":
             return 99
-        if name == "indoor_temperature_target":
-            return 25
         return 100
 
     def _get_step(self) -> float:
@@ -211,8 +207,7 @@ class QvantumNumberEntity(QvantumEntity, NumberEntity):
         self.async_write_ha_state()
 
         try:
-            await self.hass.async_add_executor_job(
-                self.coordinator.api.set_setting,
+            await self.coordinator.api.set_setting(
                 self._device["id"],
                 self._setting_name,
                 int(value),  # Convert to int for API

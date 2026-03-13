@@ -22,7 +22,7 @@ from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
 from homeassistant.core import HomeAssistant
 
-from .const import CONF_API_KEY, DOMAIN
+from .const import CONF_API_KEY
 
 # Fields to redact from diagnostic data for privacy and security
 TO_REDACT = {
@@ -39,7 +39,7 @@ TO_REDACT = {
 
 
 async def async_get_config_entry_diagnostics(
-    hass: HomeAssistant, entry: ConfigEntry
+    _hass: HomeAssistant, entry: ConfigEntry
 ) -> dict[str, Any]:
     """Return diagnostics for a config entry.
 
@@ -50,7 +50,7 @@ async def async_get_config_entry_diagnostics(
     Returns:
         Dictionary with diagnostic data
     """
-    data = hass.data[DOMAIN][entry.entry_id]
+    data = entry.runtime_data
     coordinators = data["coordinators"]
     devices = data["devices"]
 

@@ -8,6 +8,21 @@
           "email": "Email",
           "password": "Password"
         }
+      },
+      "reauth_confirm": {
+        "title": "Re-authenticate Qvantum",
+        "description": "Your Qvantum credentials for `{email}` are no longer valid. Enter your password to continue.",
+        "data": {
+          "password": "Password"
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure Qvantum",
+        "description": "Update your Qvantum account credentials",
+        "data": {
+          "email": "Email",
+          "password": "Password"
+        }
       }
     },
     "error": {
@@ -17,19 +32,10 @@
       "unknown": "Unexpected error"
     },
     "abort": {
-      "already_configured": "Account is already configured"
-    }
-  },
-  "options": {
-    "step": {
-      "init": {
-        "title": "Qvantum options",
-        "description": "Configure polling intervals for sensors",
-        "data": {
-          "scan_interval": "Normal scan interval (seconds, 10-300)",
-          "fast_scan_interval": "Fast scan interval for power/current (seconds, 5-60)"
-        }
-      }
+      "already_configured": "Account is already configured",
+      "reauth_successful": "Reauthentication was successful",
+      "reconfigure_successful": "Reconfiguration was successful",
+      "wrong_account": "You cannot change the account during reconfiguration"
     }
   },
   "services": {
@@ -56,6 +62,68 @@
           "description": "The device identifier"
         }
       }
+    },
+    "set_access_level": {
+      "name": "Set access level",
+      "description": "Sets the service access level for a specific device",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config entry ID",
+          "description": "The ID of the Qvantum config entry that owns the device"
+        },
+        "device_id": {
+          "name": "Device ID",
+          "description": "The device identifier"
+        },
+        "access_level": {
+          "name": "Access level",
+          "description": "The access level to set (e.g. \"service\" or \"user\")"
+        }
+      }
+    },
+    "toggle_auto_elevate": {
+      "name": "Toggle auto-elevate",
+      "description": "Enables or disables automatic access-level elevation for a device",
+      "fields": {
+        "config_entry_id": {
+          "name": "Config entry ID",
+          "description": "The ID of the Qvantum config entry that owns the device"
+        },
+        "device_id": {
+          "name": "Device ID",
+          "description": "The device identifier"
+        },
+        "enable": {
+          "name": "Enable",
+          "description": "Set to true to enable auto-elevate, false to disable"
+        }
+      }
+    }
+  },
+  "exceptions": {
+    "service_entry_not_found": {
+      "message": "Config entry `{entry_id}` was not found."
+    },
+    "service_entry_not_loaded": {
+      "message": "Config entry `{entry_id}` is not loaded."
+    },
+    "service_device_not_found": {
+      "message": "Device `{device_id}` was not found in config entry `{entry_id}`."
+    },
+    "service_unknown_device": {
+      "message": "No loaded Qvantum config entry owns device `{device_id}`."
+    },
+    "set_access_level_failed": {
+      "message": "Failed to set access level on the device."
+    },
+    "toggle_auto_elevate_failed": {
+      "message": "Failed to toggle auto-elevate on the device."
+    },
+    "activate_extra_hot_water_failed": {
+      "message": "Failed to activate extra hot water on the device."
+    },
+    "cancel_extra_hot_water_failed": {
+      "message": "Failed to cancel extra hot water on the device."
     }
   },
   "entity": {
@@ -145,22 +213,22 @@
         "name": "Shuntvalve, addition"
       },
       "powertotal": {
-        "name": "Total Power"
+        "name": "Total power"
       },
       "compressorenergy": {
-        "name": "Compressor Energy"
+        "name": "Compressor energy"
       },
       "additionalenergy": {
-        "name": "Additional Energy"
+        "name": "Additional energy"
       },
       "inputcurrent1": {
-        "name": "Input Current L1"
+        "name": "Input current L1"
       },
       "inputcurrent2": {
-        "name": "Input Current L2"
+        "name": "Input current L2"
       },
       "inputcurrent3": {
-        "name": "Input Current L3"
+        "name": "Input current L3"
       },
       "dhw_outl_temp_5": {
         "name": "DHW outlet temperature"
@@ -213,7 +281,7 @@
         "name": "Smart DHW mode"
       },
       "calc_suppy_cpr": {
-        "name": "Calculated Supply CPR"
+        "name": "Calculated supply CPR"
       },
       "btx": {
         "name": "BTX"
@@ -225,10 +293,10 @@
         "name": "External heating flow"
       },
       "dhwpower": {
-        "name": "DHW Power"
+        "name": "DHW power"
       },
       "heatingpower": {
-        "name": "Heating Power"
+        "name": "Heating power"
       },
       "guide_des_temp": {
         "name": "Guide desired temperature"
@@ -270,27 +338,6 @@
       "room_temp_ext": {
         "name": "Room temperature (external)"
       },
-      "dhwdemand": {
-        "name": "DHW demand"
-      },
-      "heatingdemand": {
-        "name": "Heating demand"
-      },
-      "coolingdemand": {
-        "name": "Cooling demand"
-      },
-      "heatingreleased": {
-        "name": "Heating released"
-      },
-      "coolingreleased": {
-        "name": "Cooling released"
-      },
-      "compressorreleased": {
-        "name": "Compressor released"
-      },
-      "additionreleased": {
-        "name": "Additional heat released"
-      },
       "dhw_prioritytimeleft": {
         "name": "DHW priority time remaining"
       },
@@ -301,7 +348,7 @@
         "name": "Cooling priority time remaining"
       },
       "switch_state": {
-        "name": "Switch State"
+        "name": "Switch state"
       },
       "dhwstop_temp": {
         "name": "Accumulator tank stop temperature"
@@ -313,59 +360,54 @@
         "name": "Outdoor temperature (60s filtered)"
       },
       "max_freq_env": {
-        "name": "Max Frequency Environment"
+        "name": "Max frequency environment"
       },
       "dhw_set": {
-        "name": "DHW Set"
+        "name": "DHW set"
       },
       "bp1_temp_20min_filter": {
-        "name": "BP1 Temp 20min Filter"
+        "name": "BP1 temp 20min filter"
       },
       "max_bp2_env": {
-        "name": "Max BP2 Environment"
+        "name": "Max BP2 environment"
       },
       "picpin_mask": {
-        "name": "PIC Pin Mask"
+        "name": "PIC pin mask"
       },
       "uptime": {
         "name": "Uptime"
       },
       "display_fw_version": {
-        "name": "Display Firmware Version"
+        "name": "Display firmware version"
       },
       "cc_fw_version": {
-        "name": "CC Firmware Version"
+        "name": "CC firmware version"
       },
       "inv_fw_version": {
-        "name": "Inverter Firmware Version"
+        "name": "Inverter firmware version"
       },
       "alarm_count": {
-        "name": "Alarm Count",
-        "state_attributes": {
-          "unit_of_measurement": {
-            "alarms": "alarms"
-          }
-        }
+        "name": "Alarm count"
       },
       "active_alarms": {
-        "name": "Active Alarms",
+        "name": "Active alarms",
         "state": {
           "none": "None"
         }
       },
       "service_access_until": {
-        "name": "Service Access Until"
+        "name": "Service access until"
       },
       "access_level": {
-        "name": "Access Level"
+        "name": "Access level"
       },
       "access_expires_at": {
-        "name": "Access Expires At"
+        "name": "Access expires at"
       }
     },
     "select": {
       "indoor_temperature_target": {
-        "name": "Indoor Target Temperature",
+        "name": "Indoor target temperature",
         "state": {
           "temp_15c": "15°C",
           "temp_16c": "16°C",
@@ -390,7 +432,7 @@
         }
       },
       "tap_water_capacity_target": {
-        "name": "Tap Water Capacity Target",
+        "name": "Tap water capacity target",
         "state": {
           "1_person": "1 person",
           "2_persons": "2 persons",
@@ -400,7 +442,7 @@
         }
       },
       "dhw_priority": {
-        "name": "DHW Priority",
+        "name": "DHW priority",
         "state": {
           "normal_30min": "Normal (30 Minutes)",
           "plus_1h": "+ (1 Hour)",
@@ -408,7 +450,7 @@
         }
       },
       "dhw_mode": {
-        "name": "DHW Mode",
+        "name": "DHW mode",
         "state": {
           "eco": "Eco",
           "normal": "Normal",
@@ -416,7 +458,7 @@
         }
       },
       "operation_mode": {
-        "name": "Operation Mode",
+        "name": "Operation mode",
         "state": {
           "auto": "Auto",
           "manual": "Manual",
@@ -432,7 +474,7 @@
         }
       },
       "room_comp_factor": {
-        "name": "Room Compensation Factor",
+        "name": "Room compensation factor",
         "state": {
           "none": "No compensation",
           "minimum": "Minimum (0.5)",
@@ -441,7 +483,7 @@
         }
       },
       "heating_curve_shift": {
-        "name": "Heating Curve Shift",
+        "name": "Heating curve shift",
         "state": {
           "minus_9": "-9 (Much cooler)",
           "minus_8": "-8",
@@ -473,7 +515,7 @@
         }
       },
       "sensor_mode": {
-        "name": "Sensor Mode",
+        "name": "Sensor mode",
         "state": {
           "off": "Off",
           "bt2": "BT2 (Indoor sensor)",
@@ -484,10 +526,10 @@
     },
     "switch": {
       "extra_hot_water": {
-        "name": "Extra Hot Water"
+        "name": "Extra hot water"
       },
       "smart_control_heating": {
-        "name": "SmartControl Heating"
+        "name": "SmartControl heating"
       },
       "smart_control_dhw": {
         "name": "SmartControl DHW"
@@ -496,10 +538,13 @@
         "name": "Manual: DHW"
       },
       "manual_additional_heat": {
-        "name": "Manual: Additional Heat"
+        "name": "Manual: Additional heat"
+      },
+      "manual_cooling": {
+        "name": "Manual: Cooling"
       },
       "vacation_mode": {
-        "name": "Vacation Mode"
+        "name": "Vacation mode"
       },
       "cooling_enabled": {
         "name": "Cooling enabled"
@@ -508,7 +553,7 @@
         "name": "Dew point protection"
       },
       "sg_enabled": {
-        "name": "SG Ready"
+        "name": "SG ready"
       },
       "btxmounted": {
         "name": "BTX mounted"
@@ -517,18 +562,26 @@
         "name": "BT4 mounted"
       },
       "auto_elevate_access": {
-        "name": "Auto-Elevate Access"
+        "name": "Auto-elevate access"
       }
     },
     "button": {
       "extra_hot_water_1h": {
-        "name": "Extra Hot Water 1 Hour"
+        "name": "Extra hot water 1 hour"
       },
       "refresh_sensors": {
-        "name": "Refresh Sensors"
+        "name": "Refresh sensors"
       },
       "elevate_access_level": {
-        "name": "Elevate Access Level"
+        "name": "Elevate access level"
+      }
+    },
+    "number": {
+      "tap_water_start": {
+        "name": "DHW start temperature"
+      },
+      "tap_water_stop": {
+        "name": "DHW stop temperature"
       }
     },
     "binary_sensor": {
@@ -560,10 +613,31 @@
         "name": "Connectivity"
       },
       "service_access": {
-        "name": "Service Access"
+        "name": "Service access"
       },
       "alarm_state": {
-        "name": "Alarm State"
+        "name": "Alarm state"
+      },
+      "dhwdemand": {
+        "name": "DHW demand"
+      },
+      "heatingdemand": {
+        "name": "Heating demand"
+      },
+      "heatingreleased": {
+        "name": "Heating released"
+      },
+      "additionreleased": {
+        "name": "Additional heat released"
+      },
+      "coolingdemand": {
+        "name": "Cooling demand"
+      },
+      "coolingreleased": {
+        "name": "Cooling released"
+      },
+      "compressorreleased": {
+        "name": "Compressor released"
       }
     }
   }

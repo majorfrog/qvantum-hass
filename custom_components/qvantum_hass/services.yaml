@@ -1,5 +1,5 @@
 activate_extra_hot_water:
-  name: Activate Extra Hot Water
+  name: Activate extra hot water
   description: Activate extra hot water mode for a specified duration
   fields:
     device_id:
@@ -11,6 +11,7 @@ activate_extra_hot_water:
     duration:
       name: Duration
       description: How long to activate extra hot water (in hours)
+      example: 2
       required: true
       selector:
         number:
@@ -21,7 +22,7 @@ activate_extra_hot_water:
           mode: slider
 
 cancel_extra_hot_water:
-  name: Cancel Extra Hot Water
+  name: Cancel extra hot water
   description: Cancel active extra hot water mode
   fields:
     device_id:
@@ -30,3 +31,51 @@ cancel_extra_hot_water:
       required: true
       selector:
         text:
+
+set_access_level:
+  name: Set access level
+  description: Sets the service access level for a specific device
+  fields:
+    config_entry_id:
+      name: Config entry ID
+      description: The ID of the Qvantum config entry that owns the device
+      required: true
+      selector:
+        config_entry:
+          integration: qvantum_hass
+    device_id:
+      name: Device ID
+      description: The Qvantum device ID
+      required: true
+      selector:
+        text:
+    access_level:
+      name: Access level
+      description: The access level to set (e.g. "service" or "user")
+      required: true
+      selector:
+        text:
+
+toggle_auto_elevate:
+  name: Toggle auto-elevate
+  description: Enables or disables automatic access-level elevation for a device
+  fields:
+    config_entry_id:
+      name: Config entry ID
+      description: The ID of the Qvantum config entry that owns the device
+      required: true
+      selector:
+        config_entry:
+          integration: qvantum_hass
+    device_id:
+      name: Device ID
+      description: The Qvantum device ID
+      required: true
+      selector:
+        text:
+    enable:
+      name: Enable
+      description: Set to true to enable auto-elevate, false to disable
+      required: true
+      selector:
+        boolean:

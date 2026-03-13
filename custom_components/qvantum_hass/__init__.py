@@ -16,27 +16,39 @@ Key Features:
 
 from __future__ import annotations
 
-from datetime import datetime, timedelta
+import asyncio
+from datetime import timedelta
 import logging
+from typing import Any, TypedDict
 
-from homeassistant.config_entries import ConfigEntry
+import voluptuous as vol
+
+from homeassistant.config_entries import ConfigEntry, ConfigEntryState
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD, Platform
-from homeassistant.core import HomeAssistant
-from homeassistant.exceptions import ConfigEntryNotReady
+from homeassistant.core import HomeAssistant, ServiceCall
+from homeassistant.exceptions import (
+    ConfigEntryAuthFailed,
+    ConfigEntryNotReady,
+    HomeAssistantError,
+    ServiceValidationError,
+)
+from homeassistant.helpers import config_validation as cv, device_registry as dr
 from homeassistant.helpers.storage import Store
-from homeassistant.helpers.update_coordinator import DataUpdateCoordinator
 
-from .api import AuthenticationError, QvantumApi, QvantumApiError
+from .api import ApiConnectionError, AuthenticationError, QvantumApi, QvantumApiError
 from .const import (
-    CONF_FAST_SCAN_INTERVAL,
-    CONF_SCAN_INTERVAL,
     DEFAULT_API_KEY,
     DEFAULT_FAST_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
-    FAST_POLLING_METRICS,
-    METRIC_NAMES,
+    SERVICE_SET_ACCESS_LEVEL,
+    SERVICE_TOGGLE_AUTO_ELEVATE,
 )
+from .coordinator import (  # noqa: F401  # re-exported for tests
+    CachedValue,
+    QvantumDataUpdateCoordinator,
+)
+from .definitions import get_fast_polling_metrics, get_metric_names
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -54,18 +66,247 @@ PLATFORMS: list[Platform] = [
 ]
 
 
-async def update_listener(hass: HomeAssistant, entry: ConfigEntry) -> None:
-    """Handle options update for config entry.
+class QvantumRuntimeData(TypedDict):
+    """Typed runtime data stored on a Qvantum config entry."""
 
-    This function is called when the user updates integration options
-    (such as scan interval). It triggers a reload of the config entry
-    to apply the new settings.
+    api: Any  # QvantumApi — avoid circular import at module level
+    coordinators: dict[str, Any]
+    fast_coordinators: dict[str, Any]
+    devices: list[dict[str, Any]]
 
-    Args:
-        hass: Home Assistant instance
-        entry: Config entry being updated
+
+type QvantumConfigEntry = ConfigEntry[QvantumRuntimeData]
+
+CONFIG_SCHEMA = cv.config_entry_only_config_schema(DOMAIN)
+
+# ---------------------------------------------------------------------------
+# Service call schemas — validated by HA before handlers are invoked.
+# ---------------------------------------------------------------------------
+
+_SCHEMA_SET_ACCESS_LEVEL = vol.Schema(
+    {
+        vol.Required("config_entry_id"): cv.string,
+        vol.Required("device_id"): cv.string,
+        vol.Required("access_level"): cv.string,
+    }
+)
+
+_SCHEMA_TOGGLE_AUTO_ELEVATE = vol.Schema(
+    {
+        vol.Required("config_entry_id"): cv.string,
+        vol.Required("device_id"): cv.string,
+        vol.Required("enable"): cv.boolean,
+    }
+)
+
+_SCHEMA_ACTIVATE_EXTRA_HOT_WATER = vol.Schema(
+    {
+        vol.Required("device_id"): cv.string,
+        vol.Optional("duration", default=1): vol.All(
+            vol.Coerce(int), vol.Range(min=1, max=24)
+        ),
+    }
+)
+
+_SCHEMA_CANCEL_EXTRA_HOT_WATER = vol.Schema(
+    {
+        vol.Required("device_id"): cv.string,
+    }
+)
+
+
+async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
+    """Set up the Qvantum integration.
+
+    Registers all integration-level service actions that are available
+    regardless of how many config entries are loaded.  Each handler
+    validates its inputs and raises ``ServiceValidationError`` or
+    ``HomeAssistantError`` as appropriate.
     """
-    await hass.config_entries.async_reload(entry.entry_id)
+
+    async def handle_set_access_level(call: ServiceCall) -> None:
+        """Handle the set_access_level service call."""
+        entry_id = call.data["config_entry_id"]
+        device_id = call.data["device_id"]
+        access_level = call.data["access_level"]
+
+        entry = hass.config_entries.async_get_entry(entry_id)
+        if not entry:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="service_entry_not_found",
+                translation_placeholders={"entry_id": entry_id},
+            )
+
+        if entry.state is not ConfigEntryState.LOADED or entry.runtime_data is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="service_entry_not_loaded",
+                translation_placeholders={"entry_id": entry_id},
+            )
+
+        api = entry.runtime_data["api"]
+
+        try:
+            await api.set_access_level(device_id, access_level)
+        except Exception as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="set_access_level_failed",
+            ) from err
+
+    async def handle_toggle_auto_elevate(call: ServiceCall) -> None:
+        """Handle the toggle_auto_elevate service call."""
+        entry_id = call.data["config_entry_id"]
+        device_id = call.data["device_id"]
+        enable = call.data["enable"]
+
+        entry = hass.config_entries.async_get_entry(entry_id)
+        if not entry:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="service_entry_not_found",
+                translation_placeholders={"entry_id": entry_id},
+            )
+
+        if entry.state is not ConfigEntryState.LOADED or entry.runtime_data is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="service_entry_not_loaded",
+                translation_placeholders={"entry_id": entry_id},
+            )
+
+        coordinators = entry.runtime_data.get("coordinators", {})
+        coordinator = coordinators.get(device_id)
+        if coordinator is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="service_device_not_found",
+                translation_placeholders={
+                    "device_id": device_id,
+                    "entry_id": entry_id,
+                },
+            )
+
+        try:
+            await coordinator.async_set_auto_elevate(enable)
+        except Exception as err:
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="toggle_auto_elevate_failed",
+            ) from err
+
+    async def handle_activate_extra_hot_water(call: ServiceCall) -> None:
+        """Handle the activate_extra_hot_water service call."""
+        device_id = call.data["device_id"]
+        duration = call.data.get("duration", 1)
+
+        # Find which loaded entry owns this device_id.
+        # Iterating all entries allows the service to work without requiring
+        # a config_entry_id field, keeping backward compatibility.
+        api = None
+        coordinators_for_device = None
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            if entry.state is not ConfigEntryState.LOADED or not entry.runtime_data:
+                continue
+            entry_coordinators = entry.runtime_data.get("coordinators", {})
+            if device_id in entry_coordinators:
+                api = entry.runtime_data["api"]
+                coordinators_for_device = entry_coordinators
+                break
+
+        if api is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="service_unknown_device",
+                translation_placeholders={"device_id": device_id},
+            )
+
+        try:
+            await api.set_extra_hot_water(device_id, duration)
+            _LOGGER.info(
+                "Activated extra hot water for %d hours on device %s",
+                duration,
+                device_id,
+            )
+            if coordinators_for_device and device_id in coordinators_for_device:
+                await coordinators_for_device[device_id].async_request_refresh()
+        except QvantumApiError as err:
+            _LOGGER.error(
+                "Failed to activate extra hot water on device %s: %s",
+                device_id,
+                err,
+            )
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="activate_extra_hot_water_failed",
+            ) from err
+
+    async def handle_cancel_extra_hot_water(call: ServiceCall) -> None:
+        """Handle the cancel_extra_hot_water service call."""
+        device_id = call.data["device_id"]
+
+        # Find which loaded entry owns this device_id.
+        api = None
+        coordinators_for_device = None
+        for entry in hass.config_entries.async_entries(DOMAIN):
+            if entry.state is not ConfigEntryState.LOADED or not entry.runtime_data:
+                continue
+            entry_coordinators = entry.runtime_data.get("coordinators", {})
+            if device_id in entry_coordinators:
+                api = entry.runtime_data["api"]
+                coordinators_for_device = entry_coordinators
+                break
+
+        if api is None:
+            raise ServiceValidationError(
+                translation_domain=DOMAIN,
+                translation_key="service_unknown_device",
+                translation_placeholders={"device_id": device_id},
+            )
+
+        try:
+            await api.set_extra_hot_water(device_id, 0)  # 0 hours = cancel
+            _LOGGER.info("Cancelled extra hot water on device %s", device_id)
+            if coordinators_for_device and device_id in coordinators_for_device:
+                await coordinators_for_device[device_id].async_request_refresh()
+        except QvantumApiError as err:
+            _LOGGER.error(
+                "Failed to cancel extra hot water on device %s: %s",
+                device_id,
+                err,
+            )
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="cancel_extra_hot_water_failed",
+            ) from err
+
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_SET_ACCESS_LEVEL,
+        handle_set_access_level,
+        schema=_SCHEMA_SET_ACCESS_LEVEL,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        SERVICE_TOGGLE_AUTO_ELEVATE,
+        handle_toggle_auto_elevate,
+        schema=_SCHEMA_TOGGLE_AUTO_ELEVATE,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "activate_extra_hot_water",
+        handle_activate_extra_hot_water,
+        schema=_SCHEMA_ACTIVATE_EXTRA_HOT_WATER,
+    )
+    hass.services.async_register(
+        DOMAIN,
+        "cancel_extra_hot_water",
+        handle_cancel_extra_hot_water,
+        schema=_SCHEMA_CANCEL_EXTRA_HOT_WATER,
+    )
+
+    return True
 
 
 async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
@@ -88,8 +329,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     Raises:
         ConfigEntryNotReady: If API is temporarily unavailable
     """
-    hass.data.setdefault(DOMAIN, {})
-
     # Create API instance
     api = QvantumApi(
         email=entry.data[CONF_EMAIL],
@@ -99,21 +338,52 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 
     # Try to authenticate
     try:
-        await hass.async_add_executor_job(api.authenticate)
+        await api.authenticate()
     except AuthenticationError as err:
         _LOGGER.error("Failed to authenticate with Qvantum API: %s", err)
+        await api.close()
+        raise ConfigEntryAuthFailed from err
+    except ApiConnectionError as err:
+        _LOGGER.error("Connection error during authentication: %s", err)
+        await api.close()
         raise ConfigEntryNotReady from err
 
     # Get devices
     try:
-        devices = await hass.async_add_executor_job(api.get_devices)
+        devices = await api.get_devices()
     except QvantumApiError as err:
         _LOGGER.error("Failed to get devices from Qvantum API: %s", err)
+        await api.close()
         raise ConfigEntryNotReady from err
 
     if not devices:
         _LOGGER.warning("No devices found for Qvantum account")
+        await api.close()
         return False
+
+    # Remove device-registry entries that no longer exist in the account.
+    # This prevents orphaned entities from accumulating when a device is deleted
+    # from the user's Qvantum account.
+    current_device_ids = {d["id"] for d in devices}
+    device_registry = dr.async_get(hass)
+    for device_entry in dr.async_entries_for_config_entry(
+        device_registry, entry.entry_id
+    ):
+        # Identify the device by the domain+device-id identifier we set during setup.
+        entry_device_ids = {
+            identifier[1]
+            for identifier in device_entry.identifiers
+            if identifier[0] == DOMAIN
+        }
+        if entry_device_ids and not entry_device_ids.intersection(current_device_ids):
+            _LOGGER.info(
+                "Removing stale device %s (no longer in Qvantum account)",
+                entry_device_ids,
+            )
+            device_registry.async_update_device(
+                device_entry.id,
+                remove_config_entry_id=entry.entry_id,
+            )
 
     # Create coordinators for each device
     # We use two coordinators per device:
@@ -121,33 +391,43 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     # 2. Normal coordinator (30s default) for other sensors
     coordinators = {}
     fast_coordinators = {}
-    scan_interval = entry.options.get(CONF_SCAN_INTERVAL, DEFAULT_SCAN_INTERVAL)
-    fast_scan_interval = entry.options.get(
-        CONF_FAST_SCAN_INTERVAL, DEFAULT_FAST_SCAN_INTERVAL
-    )
+    scan_interval = DEFAULT_SCAN_INTERVAL
+    fast_scan_interval = DEFAULT_FAST_SCAN_INTERVAL
 
     # Create shared storage for auto_elevate state
     store = Store(hass, STORAGE_VERSION, f"{STORAGE_KEY}_{entry.entry_id}")
 
     for device in devices:
-        # Create normal coordinator for all sensors
+        # Normal coordinator: full data fetch (settings, alarms, access level, etc.)
+        # plus all internal metrics at the configured slow interval.
+        #
+        # fetch_full_data=True is necessary because the normal coordinator calls
+        # several distinct API endpoints beyond get_internal_metrics: get_status,
+        # get_settings, get_settings_inventory, get_metrics_inventory, get_alarms,
+        # get_alarms_inventory, and get_access_level. These are separate REST
+        # endpoints — they cannot be collapsed into the metrics list.
         coordinator = QvantumDataUpdateCoordinator(
             hass,
             api,
             device["id"],
             update_interval=timedelta(seconds=scan_interval),
             store=store,
-            is_fast_coordinator=False,
+            config_entry=entry,
+            metrics=get_metric_names(),
+            fetch_full_data=True,
         )
 
-        # Create fast coordinator for power/current sensors
+        # Fast coordinator: only the real-time power/current metrics at a rapid interval.
+        # Entities with fast_polling=True subscribe to this coordinator.
         fast_coordinator = QvantumDataUpdateCoordinator(
             hass,
             api,
             device["id"],
             update_interval=timedelta(seconds=fast_scan_interval),
             store=store,
-            is_fast_coordinator=True,
+            config_entry=entry,
+            metrics=get_fast_polling_metrics(),
+            fetch_full_data=False,
         )
 
         # Load auto_elevate state from storage (shared between coordinators)
@@ -155,12 +435,22 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         # Fast coordinator shares the same auto_elevate state
         fast_coordinator.auto_elevate_enabled = coordinator.auto_elevate_enabled
 
-        # Fetch initial data for both coordinators
+        # Fetch initial data for both coordinators with timeout protection (Issue #7)
         try:
             _LOGGER.debug("Attempting first refresh for device %s", device["id"])
-            await coordinator.async_config_entry_first_refresh()
-            await fast_coordinator.async_config_entry_first_refresh()
+            # Add 60-second timeout to prevent hanging indefinitely
+            async with asyncio.timeout(60):
+                await coordinator.async_config_entry_first_refresh()
+                await fast_coordinator.async_config_entry_first_refresh()
             _LOGGER.debug("First refresh successful for device %s", device["id"])
+        except TimeoutError as err:
+            _LOGGER.error(
+                "First refresh timed out for device %s after 60 seconds",
+                device["id"],
+            )
+            raise ConfigEntryNotReady(
+                f"Device {device['id']} not responding (timeout)"
+            ) from err
         except Exception as err:
             _LOGGER.warning(
                 "Failed first refresh for device %s: %s",
@@ -173,95 +463,12 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         coordinators[device["id"]] = coordinator
         fast_coordinators[device["id"]] = fast_coordinator
 
-    hass.data[DOMAIN][entry.entry_id] = {
+    entry.runtime_data = {
         "api": api,
         "coordinators": coordinators,
         "fast_coordinators": fast_coordinators,
         "devices": devices,
     }
-
-    # Listen for options updates
-    entry.async_on_unload(entry.add_update_listener(update_listener))
-
-    # Register services
-    async def handle_activate_extra_hot_water(call):
-        """Handle the activate_extra_hot_water service call.
-
-        Activates extra hot water mode for the specified duration.
-
-        Args:
-            call: Service call data containing device_id and duration
-        """
-        device_id = call.data.get("device_id")
-        duration = call.data.get("duration", 1)
-
-        if not device_id:
-            _LOGGER.error("No device_id provided for activate_extra_hot_water service")
-            return
-
-        try:
-            await hass.async_add_executor_job(
-                api.set_extra_hot_water,
-                device_id,
-                duration,
-            )
-            _LOGGER.info(
-                "Activated extra hot water for %d hours on device %s",
-                duration,
-                device_id,
-            )
-            # Refresh coordinator if exists
-            if device_id in coordinators:
-                await coordinators[device_id].async_request_refresh()
-        except QvantumApiError as err:
-            _LOGGER.error(
-                "Failed to activate extra hot water on device %s: %s",
-                device_id,
-                err,
-            )
-
-    async def handle_cancel_extra_hot_water(call):
-        """Handle the cancel_extra_hot_water service call.
-
-        Cancels any active extra hot water mode.
-
-        Args:
-            call: Service call data containing device_id
-        """
-        device_id = call.data.get("device_id")
-
-        if not device_id:
-            _LOGGER.error("No device_id provided for cancel_extra_hot_water service")
-            return
-
-        try:
-            await hass.async_add_executor_job(
-                api.set_extra_hot_water,
-                device_id,
-                0,  # 0 hours = cancel
-            )
-            _LOGGER.info("Cancelled extra hot water on device %s", device_id)
-            # Refresh coordinator if exists
-            if device_id in coordinators:
-                await coordinators[device_id].async_request_refresh()
-        except QvantumApiError as err:
-            _LOGGER.error(
-                "Failed to cancel extra hot water on device %s: %s",
-                device_id,
-                err,
-            )
-
-    hass.services.async_register(
-        DOMAIN,
-        "activate_extra_hot_water",
-        handle_activate_extra_hot_water,
-    )
-
-    hass.services.async_register(
-        DOMAIN,
-        "cancel_extra_hot_water",
-        handle_cancel_extra_hot_water,
-    )
 
     # Setup platforms
     await hass.config_entries.async_forward_entry_setups(entry, PLATFORMS)
@@ -272,369 +479,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        hass.data[DOMAIN].pop(entry.entry_id)
+        api = entry.runtime_data.get("api") if entry.runtime_data else None
+        if api:
+            await api.close()
 
     return unload_ok
-
-
-class QvantumDataUpdateCoordinator(DataUpdateCoordinator):
-    """Data update coordinator for Qvantum devices.
-
-    This coordinator manages periodic data fetching from the Qvantum API
-    for a single device. It handles:
-    - Periodic data updates
-    - Auto-elevate access control
-    - Inventory caching
-    - Error handling and recovery
-
-    Attributes:
-        api: QvantumApi instance for API communication
-        device_id: Unique identifier for the device
-        auto_elevate_enabled: Whether to automatically elevate access
-    """
-
-    def __init__(
-        self,
-        hass: HomeAssistant,
-        api: QvantumApi,
-        device_id: str,
-        update_interval: timedelta,
-        store: Store,
-        is_fast_coordinator: bool = False,
-    ) -> None:
-        """Initialize the data update coordinator.
-
-        Args:
-            hass: Home Assistant instance
-            api: Qvantum API client
-            device_id: Unique device identifier
-            update_interval: How often to fetch updates
-            store: Storage for persisting auto-elevate state
-            is_fast_coordinator: If True, only fetches fast-polling metrics
-        """
-        self.api = api
-        self.device_id = device_id
-        self._store = store
-        self.is_fast_coordinator = is_fast_coordinator
-
-        super().__init__(
-            hass,
-            _LOGGER,
-            name=f"{DOMAIN}_{device_id}_{'fast' if is_fast_coordinator else 'normal'}",
-            update_interval=update_interval,
-        )
-        # Initialize cached inventories (only for normal coordinator)
-        # Fast coordinator doesn't need inventories
-        if not is_fast_coordinator:
-            self._settings_inventory = None
-            self._metrics_inventory = None
-            self._alarms_inventory = None
-        # Auto-elevate access control flag - will be loaded from store
-        # Default to False for new devices
-        self.auto_elevate_enabled = False
-
-    async def async_load_auto_elevate_state(self) -> None:
-        """Load auto-elevate state from storage."""
-        data = await self._store.async_load()
-        if data and self.device_id in data:
-            self.auto_elevate_enabled = data[self.device_id]
-            _LOGGER.debug(
-                "Loaded auto_elevate state for device %s: %s",
-                self.device_id,
-                self.auto_elevate_enabled,
-            )
-        else:
-            self.auto_elevate_enabled = False
-
-    async def async_set_auto_elevate(self, enabled: bool) -> None:
-        """Set auto-elevate state and persist to storage."""
-        self.auto_elevate_enabled = enabled
-
-        # Load current data
-        data = await self._store.async_load() or {}
-
-        # Update for this device
-        data[self.device_id] = enabled
-
-        # Save to storage (non-blocking)
-        await self._store.async_save(data)
-
-        _LOGGER.debug(
-            "Saved auto_elevate state for device %s: %s",
-            self.device_id,
-            enabled,
-        )
-
-    async def _async_update_data(self):
-        """Fetch data from API."""
-        return await self.hass.async_add_executor_job(self._update_data)
-
-    def _update_data(self):
-        """Fetch data from API (runs in executor)."""
-        _LOGGER.debug(
-            "Starting data update for device %s (fast_mode: %s)",
-            self.device_id,
-            self.is_fast_coordinator,
-        )
-        data = {}
-
-        # Fast coordinator only fetches power/current metrics
-        if self.is_fast_coordinator:
-            try:
-                metrics = self.api.get_internal_metrics(
-                    self.device_id, FAST_POLLING_METRICS
-                )
-                # Extract just the values dict from the response
-                if isinstance(metrics, dict) and "values" in metrics:
-                    data["internal_metrics"] = metrics["values"]
-                else:
-                    data["internal_metrics"] = metrics
-                _LOGGER.debug(
-                    "Fetched fast metrics for %s: %s",
-                    self.device_id,
-                    data["internal_metrics"],
-                )
-            except QvantumApiError as err:
-                # For transient server errors, keep previous data to avoid entities becoming unavailable
-                error_msg = str(err)
-                if (
-                    "Server error" in error_msg
-                    or "502" in error_msg
-                    or "503" in error_msg
-                    or "500" in error_msg
-                ):
-                    _LOGGER.debug(
-                        "Transient server error fetching fast metrics for %s, keeping previous values: %s",
-                        self.device_id,
-                        err,
-                    )
-                    # Return previous data if available, otherwise empty
-                    if self.data and "internal_metrics" in self.data:
-                        data["internal_metrics"] = self.data["internal_metrics"]
-                else:
-                    # For other errors, log but don't fail the update
-                    _LOGGER.debug(
-                        "Error fetching fast metrics for %s: %s", self.device_id, err
-                    )
-            return data
-
-        # Normal coordinator fetches all data
-        # If auto-elevate is enabled, ensure we have elevated access before fetching data
-        # This allows reading advanced settings that require service tech access
-        if self.auto_elevate_enabled:
-            try:
-                current_access = self.api.get_access_level(self.device_id)
-                if current_access.get("writeAccessLevel", 0) < 20:
-                    _LOGGER.debug(
-                        "Auto-elevate enabled but access level is %s, elevating",
-                        current_access.get("writeAccessLevel"),
-                    )
-                    self.api.elevate_access(self.device_id)
-            except QvantumApiError as err:
-                _LOGGER.debug("Could not check/elevate access level: %s", err)
-
-        # Get status (optional - some devices may not support this endpoint)
-        try:
-            status = self.api.get_status(self.device_id)
-            data["status"] = status
-        except QvantumApiError as err:
-            _LOGGER.debug(
-                "Status endpoint not available for %s: %s", self.device_id, err
-            )
-
-        # Get settings (optional - some devices may not support this endpoint)
-        try:
-            settings = self.api.get_settings(self.device_id)
-            data["settings"] = settings
-            if settings and "settings" in settings:
-                _LOGGER.debug(
-                    "Fetched %d settings for device %s (auto_elevate: %s)",
-                    len(settings["settings"]),
-                    self.device_id,
-                    self.auto_elevate_enabled,
-                )
-                # Debug: Log detailed information about actual settings response
-                for setting in settings["settings"]:
-                    _LOGGER.debug(
-                        "Settings response: name=%s, value=%s, data_type=%s, read_only=%s, min=%s, max=%s, step=%s, options=%s",
-                        setting.get("name"),
-                        setting.get("value"),
-                        setting.get("data_type"),
-                        setting.get("read_only", False),
-                        setting.get("min"),
-                        setting.get("max"),
-                        setting.get("step"),
-                        setting.get("options"),
-                    )
-        except QvantumApiError as err:
-            _LOGGER.debug(
-                "Settings endpoint not available for %s: %s", self.device_id, err
-            )
-
-        # Get internal metrics
-        try:
-            metrics = self.api.get_internal_metrics(self.device_id, METRIC_NAMES)
-            # Extract just the values dict from the response
-            if isinstance(metrics, dict) and "values" in metrics:
-                data["internal_metrics"] = metrics["values"]
-            else:
-                data["internal_metrics"] = metrics
-            _LOGGER.debug(
-                "Fetched internal_metrics for %s: %s",
-                self.device_id,
-                data["internal_metrics"],
-            )
-        except QvantumApiError as err:
-            # For transient server errors, keep previous data to avoid entities becoming unavailable
-            error_msg = str(err)
-            if (
-                "Server error" in error_msg
-                or "502" in error_msg
-                or "503" in error_msg
-                or "500" in error_msg
-            ):
-                _LOGGER.debug(
-                    "Transient server error fetching internal metrics for %s, keeping previous values: %s",
-                    self.device_id,
-                    err,
-                )
-                # Keep previous data if available
-                if self.data and "internal_metrics" in self.data:
-                    data["internal_metrics"] = self.data["internal_metrics"]
-            else:
-                # For other errors, log at debug level to avoid log spam
-                _LOGGER.debug(
-                    "Error fetching internal metrics for %s: %s", self.device_id, err
-                )
-
-        # Get settings inventory (cached, only needs to be fetched once)
-        if self._settings_inventory is None:
-            try:
-                self._settings_inventory = self.api.get_settings_inventory(
-                    self.device_id
-                )
-
-                # Debug: Log detailed information about all settings
-                if self._settings_inventory and "settings" in self._settings_inventory:
-                    _LOGGER.debug(
-                        "Settings inventory for device %s contains %d settings",
-                        self.device_id,
-                        len(self._settings_inventory["settings"]),
-                    )
-                    for setting in self._settings_inventory["settings"]:
-                        _LOGGER.debug(
-                            "Setting: name=%s, data_type=%s, read_only=%s, min=%s, max=%s, step=%s, options=%s, description=%s",
-                            setting.get("name"),
-                            setting.get("data_type"),
-                            setting.get("read_only", False),
-                            setting.get("min"),
-                            setting.get("max"),
-                            setting.get("step"),
-                            setting.get("options"),
-                            setting.get("description", "")[
-                                :100
-                            ],  # Truncate long descriptions
-                        )
-            except QvantumApiError as err:
-                _LOGGER.debug(
-                    "Error fetching settings inventory for %s: %s", self.device_id, err
-                )
-                self._settings_inventory = None
-
-        data["settings_inventory"] = self._settings_inventory
-
-        # Get metrics inventory (cached)
-        if self._metrics_inventory is None:
-            try:
-                self._metrics_inventory = self.api.get_metrics_inventory(self.device_id)
-                # Debug log to check smart_status metrics
-                if self._metrics_inventory and "metrics" in self._metrics_inventory:
-                    for metric in self._metrics_inventory["metrics"]:
-                        # if "smart_status" in metric.get("name", ""):
-                        _LOGGER.debug(
-                            "Metric found: name=%s, description=%s, unit=%s, all_data=%s",
-                            metric.get("name"),
-                            metric.get("description"),
-                            metric.get("unit"),
-                            metric,
-                        )
-            except QvantumApiError as err:
-                _LOGGER.debug(
-                    "Error fetching metrics inventory for %s: %s", self.device_id, err
-                )
-                self._metrics_inventory = None
-
-        data["metrics_inventory"] = self._metrics_inventory
-
-        # Get alarms
-        try:
-            alarms = self.api.get_alarms(self.device_id)
-            data["alarms"] = alarms
-        except QvantumApiError as err:
-            _LOGGER.debug("Error fetching alarms for %s: %s", self.device_id, err)
-            data["alarms"] = {"alarms": []}
-
-        # Get alarms inventory (cached, only needs to be fetched once)
-        if self._alarms_inventory is None:
-            try:
-                self._alarms_inventory = self.api.get_alarms_inventory(self.device_id)
-            except QvantumApiError as err:
-                _LOGGER.debug(
-                    "Error fetching alarms inventory for %s: %s", self.device_id, err
-                )
-                self._alarms_inventory = None
-
-        data["alarms_inventory"] = self._alarms_inventory
-
-        # Get access level information
-        try:
-            access_level = self.api.get_access_level(self.device_id)
-            data["access_level"] = access_level
-            _LOGGER.debug(
-                "Fetched access_level for %s: %s",
-                self.device_id,
-                access_level,
-            )
-
-            # Check if elevated access is about to expire (within 5 minutes)
-            # Only auto-renew if auto_elevate_enabled is True
-            if access_level.get("expiresAt") and self.auto_elevate_enabled:
-                try:
-                    expires_at = datetime.fromisoformat(access_level["expiresAt"])
-                    now = datetime.now(expires_at.tzinfo)
-                    time_until_expiry = (expires_at - now).total_seconds()
-
-                    # If elevated and expiring soon, re-elevate
-                    if (
-                        access_level.get("writeAccessLevel", 0) >= 20
-                        and 0 < time_until_expiry < 300
-                    ):  # Less than 5 minutes
-                        _LOGGER.info(
-                            "Auto-elevate enabled: Access expiring in %d seconds, re-elevating",
-                            int(time_until_expiry),
-                        )
-                        try:
-                            new_access = self.api.elevate_access(self.device_id)
-                            if new_access:
-                                data["access_level"] = new_access
-                                _LOGGER.info(
-                                    "Access re-elevated successfully, new expiry: %s",
-                                    new_access.get("expiresAt"),
-                                )
-                        except QvantumApiError as elevate_err:
-                            _LOGGER.debug(
-                                "Failed to re-elevate access: %s", elevate_err
-                            )
-                except (ValueError, AttributeError) as parse_err:
-                    _LOGGER.debug("Could not parse expiration time: %s", parse_err)
-
-        except QvantumApiError as err:
-            _LOGGER.debug("Error fetching access level for %s: %s", self.device_id, err)
-            # Set default values if access level fetch fails
-            data["access_level"] = {
-                "writeAccessLevel": 10,  # Assume normal user level
-                "readAccessLevel": 10,
-                "expiresAt": None,
-            }
-
-        return data

@@ -17,9 +17,10 @@ to provide a clean initial user experience.
 
 from __future__ import annotations
 
-from datetime import datetime
+from collections.abc import Callable
+from datetime import UTC, datetime
 import logging
-from typing import Any
+from typing import Any, Final
 
 from homeassistant.components.sensor import (
     SensorDeviceClass,
@@ -41,157 +42,725 @@ from homeassistant.const import (
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import QvantumDataUpdateCoordinator
-from .const import (
-    BT4_CONFIG_MAP,
-    BTX_CONFIG_MAP,
-    DISABLED_BY_DEFAULT_SENSORS,
-    DOMAIN,
-    FAST_POLLING_METRICS,
-    GUIDE_HE_MAP,
-    HP_STATUS_MAP,
-    METRIC_INFO,
-    OP_MODE_MAP,
-    OP_MODE_SENSOR_MAP,
-    WRITABLE_SETTINGS,
-)
+from .coordinator import QvantumDataUpdateCoordinator
 from .entity import QvantumEntity
+from .models import EntitySource, QvantumEntityDef
+
+PARALLEL_UPDATES = 0
+
+# =============================================================================
+# State mappings for sensor entities
+#
+# These dicts map internal numeric values to human-readable state strings
+# used by sensor entities for display. Co-located here with the sensor
+# classes that consume them.
+# =============================================================================
+
+HP_STATUS_MAP: Final = {
+    0: "idle",
+    1: "defrosting",
+    2: "hot_water",
+    3: "heating",
+}
+
+OP_MODE_SENSOR_MAP: Final = {
+    0: "off",
+    1: "bt2",
+    2: "bt3",
+    3: "btx",
+}
+
+GUIDE_HE_MAP: Final = {
+    0: "underfloor_heating",
+    1: "radiators",
+}
+
+BTX_CONFIG_MAP: Final = {
+    0: "undef_ntc_10k",
+    1: "pool_ntc_10k",
+    2: "sg_ready_a",
+}
+
+BT4_CONFIG_MAP: Final = {
+    0: "undef_ntc_10k",
+    1: "sg_ready_b",
+}
+
+
+# =============================================================================
+# Entity definitions for this platform
+#
+# Each entity is declared once here. definitions.py imports these to
+# build the full cross-platform collection used by the coordinator.
+# =============================================================================
+
+ENTITY_DEFS: Final[list[QvantumEntityDef]] = [
+    # =========================================================================
+    # TEMPERATURE SENSORS (source: internal_metrics)
+    # Thermocouple and NTC temperature readings from heat pump circuits.
+    # =========================================================================
+    QvantumEntityDef(
+        "bt1",
+        "Outdoor temperature sensor",
+        unit="°C",
+    ),
+    QvantumEntityDef(
+        "bt2",
+        "Indoor temperature sensor (often not mounted)",
+        unit="°C",
+        enabled_by_default=False,
+    ),
+    QvantumEntityDef(
+        "bt4",
+        "BT4 auxiliary temperature sensor (often not mounted)",
+        unit="°C",
+        enabled_by_default=False,
+    ),
+    QvantumEntityDef(
+        "bt10",
+        "Condenser outlet temperature",
+        unit="°C",
+    ),
+    QvantumEntityDef(
+        "bt11",
+        "Heating medium flow temperature (to radiators/underfloor)",
+        unit="°C",
+    ),
+    QvantumEntityDef(
+        "bt12",
+        "External heating flow temperature",
+        unit="°C",
+    ),
+    QvantumEntityDef(
+        "bt13",
+        "Condenser inlet (return) temperature",
+        unit="°C",
+    ),
+    QvantumEntityDef(
+        "bt14",
+        "Exhaust air temperature (air leaving the building)",
+        unit="°C",
+    ),
+    QvantumEntityDef(
+        "bt15",
+        "Extract air temperature (air from rooms)",
+        unit="°C",
+    ),
+    QvantumEntityDef(
+        "bt20",
+        "Discharge line temperature (compressor outlet)",
+        unit="°C",
+    ),
+    QvantumEntityDef(
+        "bt21",
+        "Liquid line temperature (after condenser)",
+        unit="°C",
+    ),
+    QvantumEntityDef(
+        "bt22",
+        "Evaporator inlet temperature",
+        unit="°C",
+    ),
+    QvantumEntityDef(
+        "bt23",
+        "Suction line temperature (compressor inlet)",
+        unit="°C",
+    ),
+    QvantumEntityDef(
+        "bt30",
+        "Accumulator (hot water) tank temperature",
+        unit="°C",
+    ),
+    QvantumEntityDef(
+        "bt31",
+        "DHW primary charge inlet temperature",
+        unit="°C",
+    ),
+    QvantumEntityDef(
+        "bt33",
+        "DHW cold water inlet temperature",
+        unit="°C",
+    ),
+    QvantumEntityDef(
+        "bt34",
+        "DHW hot water outlet temperature",
+        unit="°C",
+    ),
+    QvantumEntityDef(
+        "btx",
+        "BTX external temperature sensor (often not mounted)",
+        unit="°C",
+        enabled_by_default=False,
+    ),
+    QvantumEntityDef(
+        "cal_heat_temp",
+        "Calculated heating medium flow target temperature",
+        unit="°C",
+    ),
+    QvantumEntityDef(
+        "dhw_normal_start",
+        "Accumulator tank lower limit (heating starts)",
+        unit="°C",
+    ),
+    QvantumEntityDef(
+        "dhw_normal_stop",
+        "Accumulator tank upper limit (heating stops)",
+        unit="°C",
+    ),
+    QvantumEntityDef(
+        "dhw_outl_temp_15",
+        "DHW outlet temperature 15-minute average",
+        unit="°C",
+        enabled_by_default=False,
+    ),
+    QvantumEntityDef(
+        "dhw_outl_temp_max",
+        "DHW outlet temperature maximum recorded",
+        unit="°C",
+        enabled_by_default=False,
+    ),
+    QvantumEntityDef(
+        "dhwstop_temp",
+        "Accumulator tank stop temperature (actual limit)",
+        unit="°C",
+        enabled_by_default=False,
+    ),
+    QvantumEntityDef(
+        "dhwstart_temp",
+        "Accumulator tank start temperature (actual limit)",
+        unit="°C",
+        enabled_by_default=False,
+    ),
+    QvantumEntityDef(
+        "filtered60sec_outdoortemp",
+        "Outdoor temperature (60-second filtered)",
+        unit="°C",
+        enabled_by_default=False,
+    ),
+    QvantumEntityDef(
+        "calc_suppy_cpr",
+        "Calculated supply temperature for compressor",
+        unit="°C",
+        enabled_by_default=False,
+    ),
+    QvantumEntityDef(
+        "bp1_temp",
+        "Low pressure (evaporator) temperature",
+        unit="°C",
+    ),
+    QvantumEntityDef(
+        "bp2_temp",
+        "High pressure (condenser) temperature",
+        unit="°C",
+    ),
+    QvantumEntityDef(
+        "bp1_temp_20min_filter",
+        "Low pressure temperature (20 min filter)",
+        unit="°C",
+        enabled_by_default=False,
+    ),
+    QvantumEntityDef(
+        "dhw_set",
+        "DHW target temperature (calculated by heat pump)",
+        unit="°C",
+        enabled_by_default=False,
+    ),
+    QvantumEntityDef(
+        "room_temp_ext",
+        "External room temperature sensor reading",
+        unit="°C",
+        enabled_by_default=False,
+    ),
+    # =========================================================================
+    # PRESSURE SENSORS (source: internal_metrics)
+    # Refrigerant circuit pressure measurements.
+    # =========================================================================
+    QvantumEntityDef(
+        "bp1_pressure",
+        "Low pressure (evaporator side)",
+        unit="bar",
+    ),
+    QvantumEntityDef(
+        "bp2_pressure",
+        "High pressure (condenser side)",
+        unit="bar",
+    ),
+    QvantumEntityDef(
+        "max_bp2_env",
+        "Maximum allowed high pressure (envelope limit)",
+        unit="bar",
+        enabled_by_default=False,
+    ),
+    # =========================================================================
+    # FLOW & SPEED SENSORS (source: internal_metrics)
+    # Pump speeds, fan speeds, valve positions, and flow rates.
+    # =========================================================================
+    QvantumEntityDef(
+        "bf1_l_min",
+        "DHW flow sensor (domestic hot water flow rate)",
+        unit="L/min",
+        fast_polling=True,
+    ),
+    QvantumEntityDef(
+        "compressormeasuredspeed",
+        "Compressor measured speed",
+        unit="rpm",
+    ),
+    QvantumEntityDef(
+        "fanrpm",
+        "Ventilation fan speed",
+        unit="rpm",
+    ),
+    QvantumEntityDef(
+        "fan0_10v",
+        "Fan speed as 0-10V signal percentage",
+        unit="%",
+        enabled_by_default=False,
+    ),
+    QvantumEntityDef(
+        "gp1_speed",
+        "Circulation pump speed (heating circuit)",
+        unit="%",
+    ),
+    QvantumEntityDef(
+        "gp2_speed",
+        "DHW charge pump speed (hot water circuit)",
+        unit="%",
+    ),
+    QvantumEntityDef(
+        "qn8position",
+        "Shunt valve position QN8 (additional heat mixing)",
+        unit="%",
+        enabled_by_default=True,
+    ),
+    # =========================================================================
+    # POWER & ENERGY SENSORS (source: internal_metrics)
+    # Real-time power consumption and cumulative energy usage.
+    # =========================================================================
+    QvantumEntityDef(
+        "powertotal",
+        "Total power consumption (all circuits)",
+        unit="W",
+        fast_polling=True,
+    ),
+    QvantumEntityDef(
+        "heatingpower",
+        "Heating circuit power output",
+        unit="kW",
+        fast_polling=True,
+    ),
+    QvantumEntityDef(
+        "dhwpower",
+        "Domestic hot water power output",
+        unit="kW",
+        fast_polling=True,
+    ),
+    QvantumEntityDef(
+        "compressorenergy",
+        "Compressor cumulative energy",
+        unit="kWh",
+    ),
+    QvantumEntityDef(
+        "additionalenergy",
+        "Additional heater cumulative energy",
+        unit="kWh",
+    ),
+    # =========================================================================
+    # CURRENT SENSORS (source: internal_metrics)
+    # Per-phase electrical current measurements.
+    # =========================================================================
+    QvantumEntityDef(
+        "inputcurrent1",
+        "Input current phase L1",
+        unit="A",
+        fast_polling=True,
+    ),
+    QvantumEntityDef(
+        "inputcurrent2",
+        "Input current phase L2",
+        unit="A",
+        fast_polling=True,
+    ),
+    QvantumEntityDef(
+        "inputcurrent3",
+        "Input current phase L3",
+        unit="A",
+        fast_polling=True,
+    ),
+    # =========================================================================
+    # FREQUENCY SENSOR (source: internal_metrics)
+    # =========================================================================
+    QvantumEntityDef(
+        "max_freq_env",
+        "Maximum compressor frequency (envelope limit)",
+        unit="Hz",
+        enabled_by_default=False,
+    ),
+    # =========================================================================
+    # HOT WATER CAPACITY SENSOR (source: internal_metrics)
+    # =========================================================================
+    QvantumEntityDef(
+        "tap_water_cap",
+        "Hot water capacity (current level in litres)",
+        unit="L",
+    ),
+    # =========================================================================
+    # STATUS & MODE SENSORS (source: internal_metrics, enum type)
+    # These sensors display mapped string values from numeric codes.
+    # =========================================================================
+    QvantumEntityDef(
+        "hp_status",
+        "Heat pump operational status (idle/defrost/hot water/heating)",
+    ),
+    QvantumEntityDef(
+        "op_mode_sensor",
+        "Active temperature sensor for heat pump control",
+    ),
+    QvantumEntityDef(
+        "guide_he",
+        "Heat emitter type configured in setup guide",
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    # =========================================================================
+    # TIMER SENSORS (source: internal_metrics)
+    # Priority mode time remaining counters.
+    # =========================================================================
+    QvantumEntityDef(
+        "dhw_prioritytimeleft",
+        "DHW priority time remaining",
+        unit="minutes",
+        enabled_by_default=True,
+    ),
+    QvantumEntityDef(
+        "heating_prioritytimeleft",
+        "Heating priority time remaining",
+        unit="minutes",
+        enabled_by_default=True,
+    ),
+    QvantumEntityDef(
+        "cooling_priotitytimeleft",
+        "Cooling priority time remaining",
+        unit="minutes",
+        enabled_by_default=True,
+    ),
+    # =========================================================================
+    # MISCELLANEOUS SENSORS (source: internal_metrics)
+    # Raw internal values — disabled by default.
+    # =========================================================================
+    QvantumEntityDef(
+        "price_region",
+        "Electricity price region code",
+        enabled_by_default=False,
+    ),
+    QvantumEntityDef(
+        "switch_state",
+        "Internal relay switch state bitmask",
+        enabled_by_default=False,
+    ),
+    QvantumEntityDef(
+        "picpin_mask",
+        "PIC microcontroller pin bitmask",
+        enabled_by_default=False,
+    ),
+    # =========================================================================
+    # SMART CONTROL MODE SENSORS (source: internal_metrics)
+    # Raw SmartControl mode values. The SmartControl select entity provides
+    # a friendlier interface, but these show the raw numeric values.
+    # NOTE: Previously these were in WRITABLE_SETTINGS and skipped from sensor
+    # setup entirely. They now appear as new disabled diagnostic sensors.
+    # =========================================================================
+    QvantumEntityDef(
+        "smart_sh_mode",
+        "SmartControl space heating mode value (raw)",
+        enabled_by_default=False,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    QvantumEntityDef(
+        "smart_dhw_mode",
+        "SmartControl DHW mode value (raw)",
+        enabled_by_default=False,
+        entity_category=EntityCategory.DIAGNOSTIC,
+    ),
+    # =========================================================================
+    # READ-ONLY CONFIGURATION SENSORS (source: internal_metrics)
+    # Settings that are read as internal metrics but displayed as sensors.
+    # These use special sensor classes (enum, timestamp, text).
+    # =========================================================================
+    QvantumEntityDef(
+        "btxconfig",
+        "BTX sensor configuration (undefined/pool/SG Ready)",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_type="settings_enum",
+    ),
+    QvantumEntityDef(
+        "bt4config",
+        "BT4 sensor configuration (undefined/SG Ready)",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_type="settings_enum",
+    ),
+    QvantumEntityDef(
+        "vacation_start",
+        "Vacation mode start date/time",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_type="settings_timestamp",
+    ),
+    QvantumEntityDef(
+        "vacation_stop",
+        "Vacation mode end date/time",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_type="settings_timestamp",
+    ),
+    QvantumEntityDef(
+        "wifi_ssid",
+        "Connected WiFi network name",
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_type="settings_text",
+    ),
+    # =========================================================================
+    # DEVICE METADATA SENSORS (source: status)
+    # Information from the device status endpoint (firmware, uptime).
+    # =========================================================================
+    QvantumEntityDef(
+        "uptime",
+        "Device uptime in hours",
+        source=EntitySource.STATUS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        api_key="uptime_hours",
+        entity_type="metadata",
+    ),
+    QvantumEntityDef(
+        "display_fw_version",
+        "Display board firmware version",
+        source=EntitySource.STATUS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_type="metadata",
+    ),
+    QvantumEntityDef(
+        "cc_fw_version",
+        "Communication controller firmware version",
+        source=EntitySource.STATUS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_type="metadata",
+    ),
+    QvantumEntityDef(
+        "inv_fw_version",
+        "Inverter firmware version",
+        source=EntitySource.STATUS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_type="metadata",
+    ),
+    # =========================================================================
+    # ALARM SENSORS (source: alarms)
+    # Alarm monitoring from the device alarms endpoint.
+    # =========================================================================
+    QvantumEntityDef(
+        "alarm_count",
+        "Number of currently active alarms",
+        source=EntitySource.ALARMS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_type="alarm_count",
+    ),
+    QvantumEntityDef(
+        "active_alarms",
+        "Active alarm summary with severity breakdown",
+        source=EntitySource.ALARMS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_type="active_alarms",
+    ),
+    # =========================================================================
+    # SERVICE & ACCESS SENSORS (source: status, access_level)
+    # Service technician access monitoring.
+    # =========================================================================
+    QvantumEntityDef(
+        "service_access_until",
+        "Service access expiration timestamp",
+        source=EntitySource.STATUS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_type="service_access_until",
+    ),
+    QvantumEntityDef(
+        "access_level",
+        "Current API write access level (10=user, 20=service)",
+        source=EntitySource.ACCESS_LEVEL,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_type="access_level",
+    ),
+    QvantumEntityDef(
+        "access_expires_at",
+        "Elevated access expiration timestamp",
+        source=EntitySource.ACCESS_LEVEL,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_type="access_expires",
+    ),
+]
 
 _LOGGER = logging.getLogger(__name__)
 
+# =============================================================================
+# Value maps for settings_enum sensor types, keyed by entity key.
+# =============================================================================
+_ENUM_VALUE_MAPS: dict[str, dict[int, str]] = {
+    "btxconfig": BTX_CONFIG_MAP,
+    "bt4config": BT4_CONFIG_MAP,
+}
+
+
+def _create_internal_metric(
+    coordinator: QvantumDataUpdateCoordinator,
+    device: dict[str, Any],
+    entity_def: QvantumEntityDef,
+) -> QvantumInternalMetricSensor:
+    """Create a generic internal metric sensor."""
+    return QvantumInternalMetricSensor(coordinator, device, entity_def)
+
+
+def _create_settings_enum(
+    coordinator: QvantumDataUpdateCoordinator,
+    device: dict[str, Any],
+    entity_def: QvantumEntityDef,
+) -> QvantumSettingsEnumSensor:
+    """Create a settings enum sensor (e.g., btxconfig, bt4config)."""
+    value_map = _ENUM_VALUE_MAPS[entity_def.key]
+    return QvantumSettingsEnumSensor(coordinator, device, entity_def.key, value_map)
+
+
+def _create_settings_timestamp(
+    coordinator: QvantumDataUpdateCoordinator,
+    device: dict[str, Any],
+    entity_def: QvantumEntityDef,
+) -> QvantumSettingsTimestampSensor:
+    """Create a settings timestamp sensor (e.g., vacation_start/stop)."""
+    return QvantumSettingsTimestampSensor(coordinator, device, entity_def.key)
+
+
+def _create_settings_text(
+    coordinator: QvantumDataUpdateCoordinator,
+    device: dict[str, Any],
+    entity_def: QvantumEntityDef,
+) -> QvantumSettingsTextSensor:
+    """Create a settings text sensor (e.g., wifi_ssid)."""
+    return QvantumSettingsTextSensor(coordinator, device, entity_def.key)
+
+
+def _create_metadata(
+    coordinator: QvantumDataUpdateCoordinator,
+    device: dict[str, Any],
+    entity_def: QvantumEntityDef,
+) -> QvantumMetadataSensor:
+    """Create a device metadata sensor (e.g., uptime, firmware versions)."""
+    return QvantumMetadataSensor(
+        coordinator, device, entity_def.api_key or entity_def.key, entity_def.key
+    )
+
+
+def _create_alarm_count(
+    coordinator: QvantumDataUpdateCoordinator,
+    device: dict[str, Any],
+    _entity_def: QvantumEntityDef,
+) -> QvantumAlarmCountSensor:
+    """Create the alarm count sensor."""
+    return QvantumAlarmCountSensor(coordinator, device)
+
+
+def _create_active_alarms(
+    coordinator: QvantumDataUpdateCoordinator,
+    device: dict[str, Any],
+    _entity_def: QvantumEntityDef,
+) -> QvantumActiveAlarmsSensor:
+    """Create the active alarms sensor."""
+    return QvantumActiveAlarmsSensor(coordinator, device)
+
+
+def _create_service_access_until(
+    coordinator: QvantumDataUpdateCoordinator,
+    device: dict[str, Any],
+    _entity_def: QvantumEntityDef,
+) -> QvantumServiceAccessUntilSensor:
+    """Create the service access expiration sensor."""
+    return QvantumServiceAccessUntilSensor(coordinator, device)
+
+
+def _create_access_level(
+    coordinator: QvantumDataUpdateCoordinator,
+    device: dict[str, Any],
+    _entity_def: QvantumEntityDef,
+) -> QvantumAccessLevelSensor:
+    """Create the access level sensor."""
+    return QvantumAccessLevelSensor(coordinator, device)
+
+
+def _create_access_expires(
+    coordinator: QvantumDataUpdateCoordinator,
+    device: dict[str, Any],
+    _entity_def: QvantumEntityDef,
+) -> QvantumAccessExpireSensor:
+    """Create the access expiration sensor."""
+    return QvantumAccessExpireSensor(coordinator, device)
+
+
+def get_entity_def(key: str) -> QvantumEntityDef | None:
+    """Look up an entity definition by key within this platform's entity definitions."""
+    return next((e for e in ENTITY_DEFS if e.key == key), None)
+
+
+# Factory registry: entity_type -> constructor callable.
+# None means "use the default generic class" (QvantumInternalMetricSensor).
+# To add a new sensor type: add a factory here and set entity_type in
+# ENTITY_DEFS above. No other dispatch code needed.
+_SENSOR_FACTORIES: dict[
+    str | None,
+    Callable[
+        [QvantumDataUpdateCoordinator, dict[str, Any], QvantumEntityDef],
+        SensorEntity,
+    ],
+] = {
+    None: _create_internal_metric,
+    "settings_enum": _create_settings_enum,
+    "settings_timestamp": _create_settings_timestamp,
+    "settings_text": _create_settings_text,
+    "metadata": _create_metadata,
+    "alarm_count": _create_alarm_count,
+    "active_alarms": _create_active_alarms,
+    "service_access_until": _create_service_access_until,
+    "access_level": _create_access_level,
+    "access_expires": _create_access_expires,
+}
+
 
 async def async_setup_entry(
-    hass: HomeAssistant,
+    _hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Qvantum sensor entities from a config entry.
 
-    Creates sensor entities for all available metrics from the device,
-    excluding those that are writable settings (handled by other platforms).
-    Sensors are automatically categorized and some are disabled by default.
-
-    Fast-polling metrics (power/current) use a separate coordinator with
-    5-second updates, while other sensors use normal 30-second updates.
+    Iterates all sensor entity definitions and uses the factory registry
+    to create the appropriate sensor class for each. Fast-polling metrics
+    use a separate coordinator with 5-second updates.
 
     Args:
         hass: Home Assistant instance
         entry: Config entry for this integration instance
         async_add_entities: Callback to add entities to HA
     """
-    data = hass.data[DOMAIN][entry.entry_id]
+    data = entry.runtime_data
     coordinators = data["coordinators"]
     fast_coordinators = data["fast_coordinators"]
     devices = data["devices"]
 
-    entities = []
+    entities: list[SensorEntity] = []
 
     for device in devices:
         device_id = device["id"]
         coordinator = coordinators[device_id]
         fast_coordinator = fast_coordinators[device_id]
 
-        # Keep track of which metrics we've added to avoid duplicates
-        added_metrics = set()
-
-        # Add metrics sensors from inventory (standard public API metrics)
-        if coordinator.data and "metrics_inventory" in coordinator.data:
-            metrics_inventory = coordinator.data["metrics_inventory"]
-            if metrics_inventory and "metrics" in metrics_inventory:
-                # ALL public API metrics should be skipped - internal metrics are more comprehensive
-                # and have better naming. Public API metrics often have very long auto-generated
-                # descriptions as names.
-                _LOGGER.debug(
-                    "Skipping ALL public API metrics - using internal metrics only for device %s",
-                    device_id,
-                )
-
-        # Add internal metrics sensors (skip if already added from public API)
-        # Map internal metric names to their public API equivalents
-        internal_to_public_map = {
-            "bt1": "outdoor_temperature",
-            "bt2": "indoor_temperature",
-        }
-
-        for metric_name, unit, entity_type in METRIC_INFO:
-            if entity_type == "sensor":
-                # Skip if this internal metric has a public API equivalent that was already added
-                public_equivalent = internal_to_public_map.get(metric_name)
-                if public_equivalent and public_equivalent in added_metrics:
-                    continue
-
-                # Skip if this metric is actually a writable setting handled by another platform
-                if metric_name in WRITABLE_SETTINGS:
-                    continue
-
-                # Use fast coordinator for power/current metrics, normal coordinator for others
-                selected_coordinator = (
-                    fast_coordinator
-                    if metric_name in FAST_POLLING_METRICS
-                    else coordinator
-                )
-
-                entities.append(
-                    QvantumInternalMetricSensor(
-                        selected_coordinator,
-                        device,
-                        metric_name,
-                        unit,
-                    )
-                )
-
-        # Add device metadata sensors
-        entities.extend(
-            [
-                QvantumMetadataSensor(coordinator, device, "uptime_hours", "uptime"),
-                QvantumMetadataSensor(
-                    coordinator,
-                    device,
-                    "display_fw_version",
-                    "display_fw_version",
-                ),
-                QvantumMetadataSensor(
-                    coordinator, device, "cc_fw_version", "cc_fw_version"
-                ),
-                QvantumMetadataSensor(
-                    coordinator, device, "inv_fw_version", "inv_fw_version"
-                ),
-            ]
-        )
-
-        # Add alarm sensors
-        entities.extend(
-            [
-                QvantumAlarmCountSensor(coordinator, device),
-                QvantumActiveAlarmsSensor(coordinator, device),
-            ]
-        )
-
-        # Add service access sensor
-        entities.append(QvantumServiceAccessUntilSensor(coordinator, device))
-
-        # Add access level sensors
-        entities.extend(
-            [
-                QvantumAccessLevelSensor(coordinator, device),
-                QvantumAccessExpireSensor(coordinator, device),
-            ]
-        )
-
-        # Add settings-based read-only sensors
-        entities.extend(
-            [
-                QvantumSettingsEnumSensor(
-                    coordinator, device, "btxconfig", BTX_CONFIG_MAP
-                ),
-                QvantumSettingsEnumSensor(
-                    coordinator, device, "bt4config", BT4_CONFIG_MAP
-                ),
-                QvantumSettingsTimestampSensor(coordinator, device, "vacation_start"),
-                QvantumSettingsTimestampSensor(coordinator, device, "vacation_stop"),
-                QvantumSettingsTextSensor(coordinator, device, "wifi_ssid"),
-            ]
-        )
+        for entity_def in ENTITY_DEFS:
+            selected_coordinator = (
+                fast_coordinator if entity_def.fast_polling else coordinator
+            )
+            factory = _SENSOR_FACTORIES[entity_def.entity_type]
+            entities.append(factory(selected_coordinator, device, entity_def))
 
     async_add_entities(entities)
 
@@ -210,7 +779,7 @@ class QvantumSensorBase(QvantumEntity, SensorEntity):
         super().__init__(coordinator, device, None)  # API not needed for sensors
         self._sensor_type = sensor_type
         self._attr_translation_key = translation_key
-        self._attr_unique_id = f"qvantum_{device['id']}_{sensor_type}"
+        self._attr_unique_id = f"{device['id']}_{sensor_type}"
 
 
 class QvantumInternalMetricSensor(QvantumSensorBase):
@@ -220,35 +789,34 @@ class QvantumInternalMetricSensor(QvantumSensorBase):
         self,
         coordinator: QvantumDataUpdateCoordinator,
         device: dict[str, Any],
-        metric_name: str,
-        unit: str,
+        entity_def: QvantumEntityDef,
     ) -> None:
-        """Initialize the sensor."""
-        # Use metric_name as translation_key
-        super().__init__(coordinator, device, f"internal_{metric_name}", metric_name)
-        self._metric_name = metric_name
+        """Initialize the sensor from an entity definition."""
+        super().__init__(
+            coordinator, device, f"internal_{entity_def.key}", entity_def.key
+        )
+        self._metric_name = entity_def.key
 
-        # Disable technical sensors by default (list from const.py)
-        if metric_name in DISABLED_BY_DEFAULT_SENSORS:
+        # Set enabled/disabled from entity definition
+        if not entity_def.enabled_by_default:
             self._attr_entity_registry_enabled_default = False
 
+        # Set entity category from entity definition
+        self._attr_entity_category = entity_def.entity_category
+
         # Configure enum sensors (sensors with fixed state values)
-        if metric_name == "hp_status":
+        if entity_def.key == "hp_status":
             self._attr_device_class = SensorDeviceClass.ENUM
             self._attr_options = list(HP_STATUS_MAP.values())
-        elif metric_name == "op_mode":
-            self._attr_device_class = SensorDeviceClass.ENUM
-            self._attr_options = list(OP_MODE_MAP.values())
-        elif metric_name == "op_mode_sensor":
+        elif entity_def.key == "op_mode_sensor":
             self._attr_device_class = SensorDeviceClass.ENUM
             self._attr_options = list(OP_MODE_SENSOR_MAP.values())
-        elif metric_name == "guide_he":
+        elif entity_def.key == "guide_he":
             self._attr_device_class = SensorDeviceClass.ENUM
             self._attr_options = list(GUIDE_HE_MAP.values())
-            self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
         # Only set state_class for numeric sensors (those with a unit)
-        # Non-numeric sensors (like price_region with unit=None) should not have state_class
+        unit = entity_def.unit
         if unit is not None:
             self._attr_state_class = SensorStateClass.MEASUREMENT
 
@@ -272,6 +840,10 @@ class QvantumInternalMetricSensor(QvantumSensorBase):
             self._attr_device_class = SensorDeviceClass.POWER
             self._attr_native_unit_of_measurement = UnitOfPower.WATT
             self._attr_state_class = SensorStateClass.MEASUREMENT
+        elif unit == "kW":
+            self._attr_device_class = SensorDeviceClass.POWER
+            self._attr_native_unit_of_measurement = UnitOfPower.KILO_WATT
+            self._attr_state_class = SensorStateClass.MEASUREMENT
         elif unit == "kWh":
             self._attr_device_class = SensorDeviceClass.ENERGY
             self._attr_native_unit_of_measurement = UnitOfEnergy.KILO_WATT_HOUR
@@ -281,11 +853,11 @@ class QvantumInternalMetricSensor(QvantumSensorBase):
             self._attr_native_unit_of_measurement = UnitOfElectricCurrent.AMPERE
             self._attr_state_class = SensorStateClass.MEASUREMENT
         elif unit is not None:
-            # For other units (like "int", "minutes", "RPM", "L"), set the unit but keep MEASUREMENT state_class
+            # Custom units (rpm, minutes, L) — keep MEASUREMENT state_class
             self._attr_native_unit_of_measurement = unit
 
     @property
-    def native_value(self):
+    def native_value(self) -> str | int | float | None:
         """Return the state of the sensor."""
         if self.coordinator.data and "internal_metrics" in self.coordinator.data:
             values = self.coordinator.data["internal_metrics"]
@@ -294,8 +866,6 @@ class QvantumInternalMetricSensor(QvantumSensorBase):
             # Map status values to human-readable strings
             if self._metric_name == "hp_status" and raw_value is not None:
                 return HP_STATUS_MAP.get(int(raw_value), raw_value)
-            if self._metric_name == "op_mode" and raw_value is not None:
-                return OP_MODE_MAP.get(int(raw_value), raw_value)
             if self._metric_name == "op_mode_sensor" and raw_value is not None:
                 return OP_MODE_SENSOR_MAP.get(int(raw_value), raw_value)
             if self._metric_name == "guide_he" and raw_value is not None:
@@ -321,7 +891,7 @@ class QvantumMetadataSensor(QvantumSensorBase):
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
-    def native_value(self):
+    def native_value(self) -> str | None:
         """Return the state of the sensor."""
         if (
             self.coordinator.data
@@ -349,7 +919,7 @@ class QvantumServiceAccessUntilSensor(QvantumSensorBase):
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
-    def native_value(self):
+    def native_value(self) -> datetime | None:
         """Return the state of the sensor."""
         if (
             self.coordinator.data
@@ -382,7 +952,7 @@ class QvantumAlarmCountSensor(QvantumSensorBase):
         self._attr_state_class = None
 
     @property
-    def native_value(self):
+    def native_value(self) -> int:
         """Return the number of active alarms."""
         if (
             self.coordinator.data
@@ -429,7 +999,7 @@ class QvantumActiveAlarmsSensor(QvantumSensorBase):
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
-    def native_value(self):
+    def native_value(self) -> str:
         """Return a summary of active alarms."""
         if (
             self.coordinator.data
@@ -448,10 +1018,11 @@ class QvantumActiveAlarmsSensor(QvantumSensorBase):
                 severity = alarm.get("severity", "UNKNOWN")
                 severities[severity] = severities.get(severity, 0) + 1
 
-            parts = []
-            for severity in ["CRITICAL", "SEVERE", "WARNING", "INFO"]:
-                if severity in severities:
-                    parts.append(f"{severities[severity]} {severity}")
+            parts = [
+                f"{severities[severity]} {severity}"
+                for severity in ["CRITICAL", "SEVERE", "WARNING", "INFO"]
+                if severity in severities
+            ]
 
             return ", ".join(parts) if parts else f"{len(active_alarms)} active"
         return "Unknown"
@@ -495,7 +1066,7 @@ class QvantumAccessLevelSensor(QvantumEntity, SensorEntity):
         """Initialize the access level sensor."""
         super().__init__(coordinator, device, None)
         self._attr_translation_key = "access_level"
-        self._attr_unique_id = f"qvantum_{device['id']}_access_level"
+        self._attr_unique_id = f"{device['id']}_access_level"
         self._attr_icon = "mdi:security"
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -538,7 +1109,7 @@ class QvantumAccessExpireSensor(QvantumEntity, SensorEntity):
         """Initialize the access expiration sensor."""
         super().__init__(coordinator, device, None)
         self._attr_translation_key = "access_expires_at"
-        self._attr_unique_id = f"qvantum_{device['id']}_access_expires_at"
+        self._attr_unique_id = f"{device['id']}_access_expires_at"
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
         self._attr_icon = "mdi:clock-alert"
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -582,7 +1153,7 @@ class QvantumSettingsEnumSensor(QvantumEntity, SensorEntity):
         self._setting_name = setting_name
         self._value_map = value_map
         self._attr_translation_key = setting_name
-        self._attr_unique_id = f"qvantum_{device['id']}_{setting_name}"
+        self._attr_unique_id = f"{device['id']}_{setting_name}"
         self._attr_device_class = SensorDeviceClass.ENUM
         self._attr_options = list(value_map.values())
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
@@ -617,7 +1188,7 @@ class QvantumSettingsTimestampSensor(QvantumEntity, SensorEntity):
         super().__init__(coordinator, device, None)
         self._setting_name = setting_name
         self._attr_translation_key = setting_name
-        self._attr_unique_id = f"qvantum_{device['id']}_{setting_name}"
+        self._attr_unique_id = f"{device['id']}_{setting_name}"
         self._attr_device_class = SensorDeviceClass.TIMESTAMP
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
@@ -637,8 +1208,11 @@ class QvantumSettingsTimestampSensor(QvantumEntity, SensorEntity):
             value = self.coordinator.data["internal_metrics"].get(self._setting_name)
             if value is not None and value not in {"", 0}:
                 try:
+                    if isinstance(value, (int, float)):
+                        # API returns Unix epoch seconds
+                        return datetime.fromtimestamp(value, tz=UTC)
                     return datetime.fromisoformat(str(value))
-                except (ValueError, AttributeError):
+                except (ValueError, AttributeError, OSError):
                     _LOGGER.warning(
                         "Could not parse %s timestamp: %s",
                         self._setting_name,
@@ -660,7 +1234,7 @@ class QvantumSettingsTextSensor(QvantumEntity, SensorEntity):
         super().__init__(coordinator, device, None)
         self._setting_name = setting_name
         self._attr_translation_key = setting_name
-        self._attr_unique_id = f"qvantum_{device['id']}_{setting_name}"
+        self._attr_unique_id = f"{device['id']}_{setting_name}"
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property

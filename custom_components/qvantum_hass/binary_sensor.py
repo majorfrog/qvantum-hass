@@ -14,8 +14,9 @@ additional attributes for detailed information.
 
 from __future__ import annotations
 
+from collections.abc import Callable
 import logging
-from typing import Any
+from typing import Any, Final
 
 from homeassistant.components.binary_sensor import (
     BinarySensorDeviceClass,
@@ -26,48 +27,169 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import QvantumDataUpdateCoordinator
-from .const import DOMAIN, METRIC_INFO
+from .coordinator import QvantumDataUpdateCoordinator
 from .entity import QvantumEntity
+from .models import EntitySource, QvantumEntityDef
+
+PARALLEL_UPDATES = 0
+
+# =============================================================================
+# Entity definitions for this platform
+#
+# Each entity is declared once here. definitions.py imports these to
+# build the full cross-platform collection used by the coordinator.
+# =============================================================================
+
+ENTITY_DEFS: Final[list[QvantumEntityDef]] = [
+    # =========================================================================
+    # BINARY SENSORS — INTERNAL METRICS (source: internal_metrics)
+    # Boolean state indicators from the heat pump internal metrics.
+    # =========================================================================
+    QvantumEntityDef(
+        "picpin_relay_heat_l1",
+        "Additional electric heater relay phase L1",
+    ),
+    QvantumEntityDef(
+        "picpin_relay_heat_l2",
+        "Additional electric heater relay phase L2",
+    ),
+    QvantumEntityDef(
+        "picpin_relay_heat_l3",
+        "Additional electric heater relay phase L3",
+    ),
+    QvantumEntityDef(
+        "picpin_relay_qm10",
+        "Diverting valve DHW/heating (QM10 relay)",
+    ),
+    QvantumEntityDef(
+        "enable_sc_dhw",
+        "SmartControl DHW enabled state",
+    ),
+    QvantumEntityDef(
+        "enable_sc_sh",
+        "SmartControl space heating enabled state",
+    ),
+    QvantumEntityDef(
+        "use_adaptive",
+        "SmartControl (adaptive mode) enabled state",
+    ),
+    QvantumEntityDef(
+        "cooling_enabled",
+        "Cooling mode enabled state",
+        enabled_by_default=False,
+    ),
+    # =========================================================================
+    # DEMAND & RELEASE STATE SENSORS (source: internal_metrics)
+    # Internal control flags showing what the heat pump is requested to do.
+    # Technical/diagnostic — disabled by default.
+    # =========================================================================
+    QvantumEntityDef(
+        "dhwdemand",
+        "DHW (hot water) demand flag",
+    ),
+    QvantumEntityDef(
+        "heatingdemand",
+        "Space heating demand flag",
+    ),
+    QvantumEntityDef(
+        "heatingreleased",
+        "Heating released (compressor allowed to heat)",
+    ),
+    QvantumEntityDef(
+        "additionreleased",
+        "Additional heater released (allowed to run)",
+    ),
+    QvantumEntityDef(
+        "coolingdemand",
+        "Cooling demand flag",
+        enabled_by_default=False,
+    ),
+    QvantumEntityDef(
+        "coolingreleased",
+        "Cooling released (compressor allowed to cool)",
+        enabled_by_default=False,
+    ),
+    QvantumEntityDef(
+        "compressorreleased",
+        "Compressor released (allowed to run)",
+        enabled_by_default=True,
+    ),
+    # =========================================================================
+    # BINARY SENSORS — SPECIAL (source: status, alarms)
+    # Status indicators from other API endpoints.
+    # =========================================================================
+    QvantumEntityDef(
+        "connectivity",
+        "Device cloud connectivity status",
+        source=EntitySource.STATUS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_type="connectivity",
+    ),
+    QvantumEntityDef(
+        "alarm_state",
+        "Active alarm indicator (problem detected)",
+        source=EntitySource.ALARMS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_type="alarm_state",
+    ),
+    QvantumEntityDef(
+        "service_access",
+        "Service technician access enabled",
+        source=EntitySource.STATUS,
+        entity_category=EntityCategory.DIAGNOSTIC,
+        entity_type="service_access",
+    ),
+]
 
 _LOGGER = logging.getLogger(__name__)
 
 
+# Factory registry: entity_type -> constructor callable.
+# None means "use the default generic class" (QvantumInternalBinarySensor).
+# To add a new binary sensor type: add a factory here and set entity_type
+# in the entity definition in const.py.
+_BINARY_SENSOR_FACTORIES: dict[
+    str | None,
+    Callable[
+        [QvantumDataUpdateCoordinator, dict[str, Any], QvantumEntityDef],
+        BinarySensorEntity,
+    ],
+] = {
+    None: lambda c, d, e: QvantumInternalBinarySensor(c, d, e),  # pylint: disable=unnecessary-lambda
+    "connectivity": lambda c, d, e: QvantumConnectivitySensor(c, d),
+    "alarm_state": lambda c, d, e: QvantumAlarmStateSensor(c, d),
+    "service_access": lambda c, d, e: QvantumServiceAccessSensor(c, d),
+}
+
+
+def get_entity_def(key: str) -> QvantumEntityDef | None:
+    """Look up an entity definition by key within this platform's entity definitions."""
+    return next((e for e in ENTITY_DEFS if e.key == key), None)
+
+
 async def async_setup_entry(
-    hass: HomeAssistant,
+    _hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
-    """Set up Qvantum binary sensor entities."""
-    data = hass.data[DOMAIN][entry.entry_id]
+    """Set up Qvantum binary sensor entities.
+
+    Iterates all binary_sensor entity definitions and uses the factory
+    registry to create the appropriate class for each.
+    """
+    data = entry.runtime_data
     coordinators = data["coordinators"]
     devices = data["devices"]
 
-    entities = []
+    entities: list[BinarySensorEntity] = []
 
     for device in devices:
         device_id = device["id"]
         coordinator = coordinators[device_id]
 
-        # Add connectivity sensor
-        entities.append(QvantumConnectivitySensor(coordinator, device))
-
-        # Add alarm state sensor
-        entities.append(QvantumAlarmStateSensor(coordinator, device))
-
-        # Add service access sensor
-        entities.append(QvantumServiceAccessSensor(coordinator, device))
-
-        # Add internal metrics binary sensors
-        for metric_name, _unit, entity_type in METRIC_INFO:
-            if entity_type == "binary_sensor":
-                entities.append(
-                    QvantumInternalBinarySensor(
-                        coordinator,
-                        device,
-                        metric_name,
-                    )
-                )
+        for entity_def in ENTITY_DEFS:
+            factory = _BINARY_SENSOR_FACTORIES[entity_def.entity_type]
+            entities.append(factory(coordinator, device, entity_def))
 
     async_add_entities(entities)
 
@@ -86,7 +208,7 @@ class QvantumBinarySensorBase(QvantumEntity, BinarySensorEntity):
         super().__init__(coordinator, device, None)
         self._sensor_type = sensor_type
         self._attr_translation_key = translation_key
-        self._attr_unique_id = f"qvantum_{device['id']}_{sensor_type}"
+        self._attr_unique_id = f"{device['id']}_{sensor_type}"
 
 
 class QvantumConnectivitySensor(QvantumBinarySensorBase):
@@ -236,9 +358,9 @@ class QvantumInternalBinarySensor(QvantumBinarySensorBase):
         self,
         coordinator: QvantumDataUpdateCoordinator,
         device: dict[str, Any],
-        metric_name: str,
+        entity_def: QvantumEntityDef,
     ) -> None:
-        """Initialize the sensor."""
+        """Initialize the binary sensor from an entity definition."""
         # Map metric names to more user-friendly translation keys where needed
         translation_key_map = {
             "picpin_relay_heat_l1": "additional_power_l1",
@@ -246,21 +368,20 @@ class QvantumInternalBinarySensor(QvantumBinarySensorBase):
             "picpin_relay_heat_l3": "additional_power_l3",
             "picpin_relay_qm10": "diverting_valve",
         }
-        translation_key = translation_key_map.get(metric_name, metric_name)
+        translation_key = translation_key_map.get(entity_def.key, entity_def.key)
         super().__init__(
-            coordinator, device, f"internal_{metric_name}", translation_key
+            coordinator, device, f"internal_{entity_def.key}", translation_key
         )
-        self._metric_name = metric_name
+        self._metric_name = entity_def.key
+
+        if not entity_def.enabled_by_default:
+            self._attr_entity_registry_enabled_default = False
 
     @property
     def is_on(self) -> bool:
         """Return true if the binary sensor is on."""
-        if (
-            self.coordinator.data
-            and "internal_metrics" in self.coordinator.data
-            and "values" in self.coordinator.data["internal_metrics"]
-        ):
-            values = self.coordinator.data["internal_metrics"]["values"]
+        if self.coordinator.data and "internal_metrics" in self.coordinator.data:
+            values = self.coordinator.data["internal_metrics"]
             value = values.get(self._metric_name)
             # Convert various representations to boolean
             if isinstance(value, bool):

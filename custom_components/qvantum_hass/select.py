@@ -19,7 +19,7 @@ values, making configuration more intuitive.
 from __future__ import annotations
 
 import logging
-from typing import Any
+from typing import Any, Final
 
 from homeassistant.components.select import SelectEntity
 from homeassistant.config_entries import ConfigEntry
@@ -27,33 +27,211 @@ from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
-from . import QvantumDataUpdateCoordinator
 from .api import QvantumApi, QvantumApiError
-from .const import (
-    COMMONLY_USED_SELECT_SETTINGS,
-    CURVE_SHIFT_MAP,
-    DOMAIN,
-    HOT_WATER_PRIORITY_MAP,
-    HOT_WATER_TEMP_MAP,
-    INDOOR_TEMP_TARGET_MAP,
-    MAN_MODE_MAP,
-    OP_MODE_MAP,
-    ROOM_COMP_MAP,
-    SENSOR_MODE_OPTIONS,
-    TAP_WATER_CAPACITY_MAP,
-)
+from .coordinator import QvantumDataUpdateCoordinator
 from .entity import QvantumEntity
+from .models import EntitySource, QvantumEntityDef
+
+PARALLEL_UPDATES = 0
+
+# =============================================================================
+# State mappings for select entities
+#
+# These dicts map internal numeric values to human-readable option strings
+# used by select entities for display and write-back. Co-located here with
+# the select classes that consume them.
+# =============================================================================
+
+OP_MODE_MAP: Final = {
+    0: "auto",
+    1: "manual",
+    2: "additional_heat_only",
+}
+
+HOT_WATER_TEMP_MAP: Final = {
+    52: "normal_52c",
+    55: "hot_55c",
+    58: "very_hot_58c",
+}
+
+HOT_WATER_PRIORITY_MAP: Final = {
+    30: "normal_30min",
+    60: "plus_1h",
+    120: "plus_plus_2h",
+}
+
+TAP_WATER_CAPACITY_MAP: Final = {
+    1: "1_person",
+    2: "2_persons",
+    3: "3_persons",
+    4: "4_persons",
+    5: "5_persons",
+}
+
+MAN_MODE_MAP: Final = {
+    0: "off",
+    1: "heating",
+    2: "cooling",
+}
+
+ROOM_COMP_MAP: Final = {
+    0: "none",
+    0.5: "minimum",
+    1: "normal",
+    2: "maximum",
+}
+
+CURVE_SHIFT_MAP: Final = {
+    -9: "minus_9",
+    -8: "minus_8",
+    -7: "minus_7",
+    -6: "minus_6",
+    -5: "minus_5",
+    -4: "minus_4",
+    -3: "minus_3",
+    -2: "minus_2",
+    -1: "minus_1",
+    0: "zero",
+    1: "plus_1",
+    2: "plus_2",
+    3: "plus_3",
+    4: "plus_4",
+    5: "plus_5",
+    6: "plus_6",
+    7: "plus_7",
+    8: "plus_8",
+    9: "plus_9",
+}
+
+SENSOR_MODE_OPTIONS: Final = {
+    "off": "off",
+    "bt2": "bt2",
+    "bt3": "bt3",
+    "btx": "btx",
+}
+
+INDOOR_TEMP_TARGET_MAP: Final = {
+    15: "temp_15c",
+    16: "temp_16c",
+    17: "temp_17c",
+    18: "temp_18c",
+    19: "temp_19c",
+    20: "temp_20c",
+    21: "temp_21c",
+    22: "temp_22c",
+    23: "temp_23c",
+    24: "temp_24c",
+    25: "temp_25c",
+}
+
+
+# =============================================================================
+# Entity definitions for this platform
+#
+# Each entity is declared once here. definitions.py imports these to
+# build the full cross-platform collection used by the coordinator.
+# =============================================================================
+
+ENTITY_DEFS: Final[list[QvantumEntityDef]] = [
+    # =========================================================================
+    # SELECT ENTITIES (various sources)
+    # Named-option controls for heat pump settings. Each has a custom class
+    # in select.py with its own value mapping and API interaction.
+    # =========================================================================
+    QvantumEntityDef(
+        "indoor_temperature_target",
+        "Indoor target temperature (15-25°C)",
+        source=EntitySource.SETTINGS,
+        entity_category=EntityCategory.CONFIG,
+    ),
+    QvantumEntityDef(
+        "smartcontrol",
+        "SmartControl mode (off/eco/balanced/comfort)",
+        source=EntitySource.INTERNAL_METRICS,
+        entity_category=EntityCategory.CONFIG,
+        api_key="use_adaptive",  # Primary metric read; also reads smart_sh_mode
+    ),
+    QvantumEntityDef(
+        "tap_water_capacity_target",
+        "Hot water capacity target (1-5 persons)",
+        source=EntitySource.SETTINGS,
+        entity_category=EntityCategory.CONFIG,
+    ),
+    QvantumEntityDef(
+        "dhw_priority",
+        "DHW priority time (normal/+1h/++2h)",
+        source=EntitySource.INTERNAL_METRICS,
+        entity_category=EntityCategory.CONFIG,
+        api_key="dhw_prioritytime",
+    ),
+    QvantumEntityDef(
+        "dhw_mode",
+        "DHW heating mode (eco/normal/extra)",
+        source=EntitySource.INTERNAL_METRICS,
+        entity_category=EntityCategory.CONFIG,
+        api_key="dhw_mode",
+        enabled_by_default=False,
+    ),
+    QvantumEntityDef(
+        "operation_mode",
+        "Heat pump operation mode (auto/manual/add. heat)",
+        source=EntitySource.INTERNAL_METRICS,
+        entity_category=EntityCategory.CONFIG,
+        api_key="op_mode",
+    ),
+    QvantumEntityDef(
+        "manual_mode",
+        "Manual operation sub-mode (off/heating/cooling)",
+        source=EntitySource.INTERNAL_METRICS,
+        entity_category=EntityCategory.CONFIG,
+        api_key="man_mode",
+    ),
+    QvantumEntityDef(
+        "dhw_out_temp",
+        "DHW outlet temperature target (52/55/58°C)",
+        source=EntitySource.INTERNAL_METRICS,
+        entity_category=EntityCategory.CONFIG,
+        api_key="dhw_outl_temp_5",
+    ),
+    QvantumEntityDef(
+        "room_comp_factor",
+        "Room temperature compensation factor",
+        source=EntitySource.INTERNAL_METRICS,
+        entity_category=EntityCategory.CONFIG,
+        api_key="room_comp_factor",
+    ),
+    QvantumEntityDef(
+        "heating_curve_shift",
+        "Heating curve shift / indoor temp offset (-9 to +9)",
+        source=EntitySource.SETTINGS,
+        entity_category=EntityCategory.CONFIG,
+        api_key="indoor_temperature_offset",
+    ),
+    QvantumEntityDef(
+        "sensor_mode",
+        "Temperature sensor mode (which sensor controls HP)",
+        source=EntitySource.SETTINGS,
+        entity_category=EntityCategory.CONFIG,
+        api_key="sensor_mode",  # Reads/writes string values: off, bt2, bt3, btx
+        enabled_by_default=False,
+    ),
+]
 
 _LOGGER = logging.getLogger(__name__)
 
 
+def get_entity_def(key: str) -> QvantumEntityDef | None:
+    """Look up an entity definition by key within this platform's entity definitions."""
+    return next((e for e in ENTITY_DEFS if e.key == key), None)
+
+
 async def async_setup_entry(
-    hass: HomeAssistant,
+    _hass: HomeAssistant,
     entry: ConfigEntry,
     async_add_entities: AddEntitiesCallback,
 ) -> None:
     """Set up Qvantum select entities."""
-    data = hass.data[DOMAIN][entry.entry_id]
+    data = entry.runtime_data
     coordinators = data["coordinators"]
     devices = data["devices"]
     api = data["api"]
@@ -166,7 +344,7 @@ async def async_setup_entry(
     async_add_entities(entities)
 
 
-class QvantumIndoorTempTargetSelect(QvantumEntity, SelectEntity):
+class QvantumIndoorTempTargetSelect(QvantumEntity, SelectEntity):  # pylint: disable=abstract-method
     """Select entity for Indoor Temperature Target."""
 
     def __init__(
@@ -178,12 +356,13 @@ class QvantumIndoorTempTargetSelect(QvantumEntity, SelectEntity):
         """Initialize the select entity."""
         super().__init__(coordinator, device, api)
         self._attr_translation_key = "indoor_temperature_target"
-        self._attr_unique_id = f"qvantum_{device['id']}_indoor_temp_target"
+        self._attr_unique_id = f"{device['id']}_indoor_temp_target"
         self._attr_icon = "mdi:home-thermometer"
         self._attr_entity_category = EntityCategory.CONFIG
         # Check if this should be enabled by default
+        _def = get_entity_def("indoor_temperature_target")
         self._attr_entity_registry_enabled_default = (
-            "indoor_temperature_target" in COMMONLY_USED_SELECT_SETTINGS
+            _def.enabled_by_default if _def else True
         )
         self._attr_options = list(INDOOR_TEMP_TARGET_MAP.values())
 
@@ -224,8 +403,7 @@ class QvantumIndoorTempTargetSelect(QvantumEntity, SelectEntity):
             return
 
         try:
-            await self.hass.async_add_executor_job(
-                self._api.set_setting,
+            await self._api.set_setting(
                 self._device["id"],
                 "indoor_temperature_target",
                 value,
@@ -245,7 +423,7 @@ class QvantumIndoorTempTargetSelect(QvantumEntity, SelectEntity):
             )
 
 
-class QvantumSmartControlSelect(QvantumEntity, SelectEntity):
+class QvantumSmartControlSelect(QvantumEntity, SelectEntity):  # pylint: disable=abstract-method
     """Select entity for SmartControl mode."""
 
     def __init__(
@@ -257,12 +435,13 @@ class QvantumSmartControlSelect(QvantumEntity, SelectEntity):
         """Initialize the select entity."""
         super().__init__(coordinator, device, api)
         self._attr_translation_key = "smartcontrol"
-        self._attr_unique_id = f"qvantum_{device['id']}_smartcontrol"
+        self._attr_unique_id = f"{device['id']}_smartcontrol"
         self._attr_icon = "mdi:leaf"
         self._attr_options = ["off", "eco", "balanced", "comfort"]
         self._attr_entity_category = EntityCategory.CONFIG
+        _def = get_entity_def("smartcontrol")
         self._attr_entity_registry_enabled_default = (
-            "smart_control_mode" in COMMONLY_USED_SELECT_SETTINGS
+            _def.enabled_by_default if _def else True
         )
 
     @property
@@ -330,8 +509,7 @@ class QvantumSmartControlSelect(QvantumEntity, SelectEntity):
         dhw_mode = mode_value
 
         try:
-            await self.hass.async_add_executor_job(
-                self._api.set_smartcontrol,
+            await self._api.set_smartcontrol(
                 self._device["id"],
                 sh_mode,
                 dhw_mode,
@@ -350,7 +528,7 @@ class QvantumSmartControlSelect(QvantumEntity, SelectEntity):
             )
 
 
-class QvantumTapWaterCapacitySelect(QvantumEntity, SelectEntity):
+class QvantumTapWaterCapacitySelect(QvantumEntity, SelectEntity):  # pylint: disable=abstract-method
     """Select entity for tap water capacity target (number of people)."""
 
     def __init__(
@@ -362,12 +540,13 @@ class QvantumTapWaterCapacitySelect(QvantumEntity, SelectEntity):
         """Initialize the select entity."""
         super().__init__(coordinator, device, api)
         self._attr_translation_key = "tap_water_capacity_target"
-        self._attr_unique_id = f"qvantum_{device['id']}_tap_water_capacity_target"
+        self._attr_unique_id = f"{device['id']}_tap_water_capacity_target"
         self._attr_icon = "mdi:account-multiple"
         self._attr_options = list(TAP_WATER_CAPACITY_MAP.values())
         self._attr_entity_category = EntityCategory.CONFIG
+        _def = get_entity_def("tap_water_capacity_target")
         self._attr_entity_registry_enabled_default = (
-            "tap_water_capacity_target" in COMMONLY_USED_SELECT_SETTINGS
+            _def.enabled_by_default if _def else True
         )
 
     @property
@@ -411,8 +590,7 @@ class QvantumTapWaterCapacitySelect(QvantumEntity, SelectEntity):
             return
 
         try:
-            await self.hass.async_add_executor_job(
-                self._api.set_setting,
+            await self._api.set_setting(
                 self._device["id"],
                 "tap_water_capacity_target",
                 people_count,
@@ -431,7 +609,7 @@ class QvantumTapWaterCapacitySelect(QvantumEntity, SelectEntity):
             )
 
 
-class QvantumDHWPrioritySelect(QvantumEntity, SelectEntity):
+class QvantumDHWPrioritySelect(QvantumEntity, SelectEntity):  # pylint: disable=abstract-method
     """Select entity for DHW Priority mode."""
 
     def __init__(
@@ -443,12 +621,13 @@ class QvantumDHWPrioritySelect(QvantumEntity, SelectEntity):
         """Initialize the select entity."""
         super().__init__(coordinator, device, api)
         self._attr_translation_key = "dhw_priority"
-        self._attr_unique_id = f"qvantum_{device['id']}_dhw_priority"
+        self._attr_unique_id = f"{device['id']}_dhw_priority"
         self._attr_icon = "mdi:water-thermometer"
         self._current_custom_value = None  # Track custom value
         self._attr_entity_category = EntityCategory.CONFIG
+        _def = get_entity_def("dhw_priority")
         self._attr_entity_registry_enabled_default = (
-            "dhw_priority_time" in COMMONLY_USED_SELECT_SETTINGS
+            _def.enabled_by_default if _def else True
         )
 
     @property
@@ -485,6 +664,9 @@ class QvantumDHWPrioritySelect(QvantumEntity, SelectEntity):
         if value is not None:
             try:
                 value_int = int(value)
+            except (TypeError, ValueError):
+                pass
+            else:
                 if value_int in HOT_WATER_PRIORITY_MAP:
                     # Clear custom value if we're back to a standard value
                     self._current_custom_value = None
@@ -500,8 +682,6 @@ class QvantumDHWPrioritySelect(QvantumEntity, SelectEntity):
                 )
                 self._current_custom_value = value_int
                 return f"Custom ({value_int} minutes)"
-            except (TypeError, ValueError):
-                pass
 
         # Clear custom value and return default
         self._current_custom_value = None
@@ -528,8 +708,7 @@ class QvantumDHWPrioritySelect(QvantumEntity, SelectEntity):
             return
 
         try:
-            response = await self.hass.async_add_executor_job(
-                self._api.set_setting,
+            response = await self._api.set_setting(
                 self._device["id"],
                 "dhw_prioritytime",
                 value,
@@ -569,7 +748,7 @@ class QvantumDHWPrioritySelect(QvantumEntity, SelectEntity):
             )
 
 
-class QvantumDHWModeSelect(QvantumEntity, SelectEntity):
+class QvantumDHWModeSelect(QvantumEntity, SelectEntity):  # pylint: disable=abstract-method
     """Select entity for DHW Mode."""
 
     def __init__(
@@ -581,11 +760,12 @@ class QvantumDHWModeSelect(QvantumEntity, SelectEntity):
         """Initialize the select entity."""
         super().__init__(coordinator, device, api)
         self._attr_translation_key = "dhw_mode"
-        self._attr_unique_id = f"qvantum_{device['id']}_dhw_mode"
+        self._attr_unique_id = f"{device['id']}_dhw_mode"
         self._attr_icon = "mdi:water-thermometer"
         self._attr_entity_category = EntityCategory.CONFIG
+        _def = get_entity_def("dhw_mode")
         self._attr_entity_registry_enabled_default = (
-            "dhw_mode" in COMMONLY_USED_SELECT_SETTINGS
+            _def.enabled_by_default if _def else True
         )
 
     @property
@@ -632,8 +812,7 @@ class QvantumDHWModeSelect(QvantumEntity, SelectEntity):
             return
 
         try:
-            await self.hass.async_add_executor_job(
-                self._api.set_setting,
+            await self._api.set_setting(
                 self._device["id"],
                 "dhw_mode",
                 value,
@@ -652,7 +831,7 @@ class QvantumDHWModeSelect(QvantumEntity, SelectEntity):
             )
 
 
-class QvantumOperationModeSelect(QvantumEntity, SelectEntity):
+class QvantumOperationModeSelect(QvantumEntity, SelectEntity):  # pylint: disable=abstract-method
     """Select entity for Operation Mode."""
 
     def __init__(
@@ -664,11 +843,12 @@ class QvantumOperationModeSelect(QvantumEntity, SelectEntity):
         """Initialize the select entity."""
         super().__init__(coordinator, device, api)
         self._attr_translation_key = "operation_mode"
-        self._attr_unique_id = f"qvantum_{device['id']}_operation_mode"
+        self._attr_unique_id = f"{device['id']}_operation_mode"
         self._attr_icon = "mdi:cog"
         self._attr_entity_category = EntityCategory.CONFIG
+        _def = get_entity_def("operation_mode")
         self._attr_entity_registry_enabled_default = (
-            "op_mode" in COMMONLY_USED_SELECT_SETTINGS
+            _def.enabled_by_default if _def else True
         )
 
     @property
@@ -713,8 +893,7 @@ class QvantumOperationModeSelect(QvantumEntity, SelectEntity):
             return
 
         try:
-            await self.hass.async_add_executor_job(
-                self._api.set_setting,
+            await self._api.set_setting(
                 self._device["id"],
                 "op_mode",
                 value,
@@ -733,7 +912,7 @@ class QvantumOperationModeSelect(QvantumEntity, SelectEntity):
             )
 
 
-class QvantumManualModeSelect(QvantumEntity, SelectEntity):
+class QvantumManualModeSelect(QvantumEntity, SelectEntity):  # pylint: disable=abstract-method
     """Select entity for Manual Mode (off/heating/cooling)."""
 
     def __init__(
@@ -745,12 +924,13 @@ class QvantumManualModeSelect(QvantumEntity, SelectEntity):
         """Initialize the select entity."""
         super().__init__(coordinator, device, api)
         self._attr_translation_key = "manual_mode"
-        self._attr_unique_id = f"qvantum_{device['id']}_manual_mode"
+        self._attr_unique_id = f"{device['id']}_manual_mode"
         self._attr_icon = "mdi:radiator"
         self._attr_entity_category = EntityCategory.CONFIG
         self._attr_options = list(MAN_MODE_MAP.values())
+        _def = get_entity_def("manual_mode")
         self._attr_entity_registry_enabled_default = (
-            "man_mode" in COMMONLY_USED_SELECT_SETTINGS
+            _def.enabled_by_default if _def else True
         )
 
     @property
@@ -793,8 +973,7 @@ class QvantumManualModeSelect(QvantumEntity, SelectEntity):
             return
 
         try:
-            await self.hass.async_add_executor_job(
-                self._api.set_setting,
+            await self._api.set_setting(
                 self._device["id"],
                 "man_mode",
                 value,
@@ -844,7 +1023,7 @@ class QvantumManualModeSelect(QvantumEntity, SelectEntity):
         return True
 
 
-class QvantumDHWOutTempSelect(QvantumEntity, SelectEntity):
+class QvantumDHWOutTempSelect(QvantumEntity, SelectEntity):  # pylint: disable=abstract-method
     """Select entity for DHW Out Temperature mode."""
 
     def __init__(
@@ -856,12 +1035,13 @@ class QvantumDHWOutTempSelect(QvantumEntity, SelectEntity):
         """Initialize the select entity."""
         super().__init__(coordinator, device, api)
         self._attr_translation_key = "dhw_out_temp"
-        self._attr_unique_id = f"qvantum_{device['id']}_dhw_out_temp"
+        self._attr_unique_id = f"{device['id']}_dhw_out_temp"
         self._attr_icon = "mdi:thermometer-water"
         self._current_custom_value = None  # Track custom value
         self._attr_entity_category = EntityCategory.CONFIG
+        _def = get_entity_def("dhw_out_temp")
         self._attr_entity_registry_enabled_default = (
-            "dhw_out_temp" in COMMONLY_USED_SELECT_SETTINGS
+            _def.enabled_by_default if _def else True
         )
 
     @property
@@ -898,6 +1078,9 @@ class QvantumDHWOutTempSelect(QvantumEntity, SelectEntity):
         if value is not None:
             try:
                 value_int = int(value)
+            except (TypeError, ValueError):
+                pass
+            else:
                 if value_int in HOT_WATER_TEMP_MAP:
                     # Clear custom value if we're back to a standard value
                     self._current_custom_value = None
@@ -912,8 +1095,6 @@ class QvantumDHWOutTempSelect(QvantumEntity, SelectEntity):
                 )
                 self._current_custom_value = value_int
                 return f"Custom ({value_int}°C)"
-            except (TypeError, ValueError):
-                pass
 
         # Clear custom value and return default
         self._current_custom_value = None
@@ -940,8 +1121,7 @@ class QvantumDHWOutTempSelect(QvantumEntity, SelectEntity):
             return
 
         try:
-            response = await self.hass.async_add_executor_job(
-                self._api.set_setting,
+            response = await self._api.set_setting(
                 self._device["id"],
                 "dhw_outl_temp_5",
                 value,
@@ -979,7 +1159,7 @@ class QvantumDHWOutTempSelect(QvantumEntity, SelectEntity):
             )
 
 
-class QvantumRoomCompFactorSelect(QvantumEntity, SelectEntity):
+class QvantumRoomCompFactorSelect(QvantumEntity, SelectEntity):  # pylint: disable=abstract-method
     """Select entity for Room Compensation Factor."""
 
     def __init__(
@@ -991,12 +1171,13 @@ class QvantumRoomCompFactorSelect(QvantumEntity, SelectEntity):
         """Initialize the select entity."""
         super().__init__(coordinator, device, api)
         self._attr_translation_key = "room_comp_factor"
-        self._attr_unique_id = f"qvantum_{device['id']}_room_comp_factor"
+        self._attr_unique_id = f"{device['id']}_room_comp_factor"
         self._attr_icon = "mdi:thermometer-lines"
         self._attr_entity_category = EntityCategory.CONFIG
         self._attr_options = list(ROOM_COMP_MAP.values())
+        _def = get_entity_def("room_comp_factor")
         self._attr_entity_registry_enabled_default = (
-            "room_comp_factor" in COMMONLY_USED_SELECT_SETTINGS
+            _def.enabled_by_default if _def else True
         )
 
     @property
@@ -1047,8 +1228,7 @@ class QvantumRoomCompFactorSelect(QvantumEntity, SelectEntity):
             return
 
         try:
-            await self.hass.async_add_executor_job(
-                self._api.set_setting,
+            await self._api.set_setting(
                 self._device["id"],
                 "room_comp_factor",
                 value,
@@ -1068,7 +1248,7 @@ class QvantumRoomCompFactorSelect(QvantumEntity, SelectEntity):
             )
 
 
-class QvantumCurveShiftSelect(QvantumEntity, SelectEntity):
+class QvantumCurveShiftSelect(QvantumEntity, SelectEntity):  # pylint: disable=abstract-method
     """Select entity for Heating Curve Shift (indoor temperature offset)."""
 
     def __init__(
@@ -1080,12 +1260,13 @@ class QvantumCurveShiftSelect(QvantumEntity, SelectEntity):
         """Initialize the select entity."""
         super().__init__(coordinator, device, api)
         self._attr_translation_key = "heating_curve_shift"
-        self._attr_unique_id = f"qvantum_{device['id']}_curve_shift"
+        self._attr_unique_id = f"{device['id']}_curve_shift"
         self._attr_icon = "mdi:chart-bell-curve-cumulative"
         self._attr_entity_category = EntityCategory.CONFIG
         self._attr_options = list(CURVE_SHIFT_MAP.values())
+        _def = get_entity_def("heating_curve_shift")
         self._attr_entity_registry_enabled_default = (
-            "heating_curve_shift" in COMMONLY_USED_SELECT_SETTINGS
+            _def.enabled_by_default if _def else True
         )
 
     @property
@@ -1125,8 +1306,7 @@ class QvantumCurveShiftSelect(QvantumEntity, SelectEntity):
             return
 
         try:
-            await self.hass.async_add_executor_job(
-                self._api.set_setting,
+            await self._api.set_setting(
                 self._device["id"],
                 "indoor_temperature_offset",
                 value,
@@ -1146,7 +1326,7 @@ class QvantumCurveShiftSelect(QvantumEntity, SelectEntity):
             )
 
 
-class QvantumSensorModeSelect(QvantumEntity, SelectEntity):
+class QvantumSensorModeSelect(QvantumEntity, SelectEntity):  # pylint: disable=abstract-method
     """Select entity for Sensor Mode (which sensor controls heat pump operation)."""
 
     def __init__(
@@ -1158,11 +1338,12 @@ class QvantumSensorModeSelect(QvantumEntity, SelectEntity):
         """Initialize the select entity."""
         super().__init__(coordinator, device, api)
         self._attr_translation_key = "sensor_mode"
-        self._attr_unique_id = f"qvantum_{device['id']}_sensor_mode"
+        self._attr_unique_id = f"{device['id']}_sensor_mode"
         self._attr_icon = "mdi:thermometer-check"
         self._attr_entity_category = EntityCategory.CONFIG
+        _def = get_entity_def("sensor_mode")
         self._attr_entity_registry_enabled_default = (
-            "sensor_mode" in COMMONLY_USED_SELECT_SETTINGS
+            _def.enabled_by_default if _def else True
         )
         self._attr_options = list(SENSOR_MODE_OPTIONS.values())
 
@@ -1196,8 +1377,7 @@ class QvantumSensorModeSelect(QvantumEntity, SelectEntity):
             return
 
         try:
-            await self.hass.async_add_executor_job(
-                self._api.set_setting,
+            await self._api.set_setting(
                 self._device["id"],
                 "sensor_mode",
                 value,
