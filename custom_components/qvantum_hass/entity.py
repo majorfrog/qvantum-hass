@@ -33,9 +33,18 @@ def create_device_info(device: dict[str, Any]) -> DeviceInfo:
         or device.get("serial", "")
     )
     model = device.get("model", "Heat Pump")
+    # Use the user-assigned name from the API when available (unique per household).
+    # Fall back to "{model} ({serial})" if unnamed, or just model as a last resort.
+    user_name = device.get("name") or ""
+    if user_name:
+        device_name = user_name
+    elif serial:
+        device_name = f"{model} ({serial})"
+    else:
+        device_name = model
     return DeviceInfo(
         identifiers={(DOMAIN, device["id"])},
-        name=model,
+        name=device_name,
         manufacturer=MANUFACTURER,
         model=model,
         serial_number=serial or None,
