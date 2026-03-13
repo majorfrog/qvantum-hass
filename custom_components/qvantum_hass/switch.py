@@ -21,9 +21,11 @@ from homeassistant.components.switch import SwitchEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant, callback
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .api import QvantumApiError
+from .const import DOMAIN
 from .coordinator import QvantumDataUpdateCoordinator
 from .entity import QvantumEntity
 from .models import EntitySource, QvantumEntityDef
@@ -219,6 +221,10 @@ class QvantumSwitchEntity(QvantumEntity, SwitchEntity):  # pylint: disable=abstr
                 self._setting_name,
                 err,
             )
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="set_value_failed",
+            ) from err
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
@@ -242,6 +248,10 @@ class QvantumSwitchEntity(QvantumEntity, SwitchEntity):  # pylint: disable=abstr
                 self._setting_name,
                 err,
             )
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="set_value_failed",
+            ) from err
 
 
 class QvantumExtraHotWaterSwitch(QvantumEntity, SwitchEntity):  # pylint: disable=abstract-method
@@ -333,6 +343,10 @@ class QvantumExtraHotWaterSwitch(QvantumEntity, SwitchEntity):  # pylint: disabl
                 "Failed to activate extra hot water: %s",
                 err,
             )
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="activate_extra_hot_water_failed",
+            ) from err
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Cancel extra hot water via the command API."""
@@ -358,6 +372,10 @@ class QvantumExtraHotWaterSwitch(QvantumEntity, SwitchEntity):  # pylint: disabl
                 "Failed to cancel extra hot water: %s",
                 err,
             )
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="cancel_extra_hot_water_failed",
+            ) from err
 
 
 class QvantumSmartControlSwitch(QvantumEntity, SwitchEntity):  # pylint: disable=abstract-method
@@ -439,6 +457,10 @@ class QvantumSmartControlSwitch(QvantumEntity, SwitchEntity):  # pylint: disable
                 self._setting_name,
                 err,
             )
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="set_value_failed",
+            ) from err
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
@@ -461,6 +483,10 @@ class QvantumSmartControlSwitch(QvantumEntity, SwitchEntity):  # pylint: disable
                 self._setting_name,
                 err,
             )
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="set_value_failed",
+            ) from err
 
     @property
     def available(self) -> bool:
@@ -592,6 +618,10 @@ class QvantumManualOperationSwitch(QvantumEntity, SwitchEntity):  # pylint: disa
                 self._setting_name,
                 err,
             )
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="set_value_failed",
+            ) from err
 
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
@@ -614,6 +644,10 @@ class QvantumManualOperationSwitch(QvantumEntity, SwitchEntity):  # pylint: disa
                 self._setting_name,
                 err,
             )
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="set_value_failed",
+            ) from err
 
     @property
     def available(self) -> bool:

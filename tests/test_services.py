@@ -9,6 +9,7 @@ import pytest
 from homeassistant.core import HomeAssistant
 from homeassistant.exceptions import HomeAssistantError, ServiceValidationError
 
+from custom_components.qvantum_hass.api import QvantumApiError
 from custom_components.qvantum_hass.const import (
     DOMAIN,
     SERVICE_SET_ACCESS_LEVEL,
@@ -72,7 +73,7 @@ async def test_set_access_level_api_error(
     hass: HomeAssistant, mock_config_entry, mock_api
 ):
     """Test set_access_level handles API errors."""
-    mock_api.set_access_level.side_effect = Exception("API Error")
+    mock_api.set_access_level.side_effect = QvantumApiError("API Error")
 
     with patch(
         "custom_components.qvantum_hass.QvantumApi",
@@ -164,7 +165,7 @@ async def test_toggle_auto_elevate_error(
     with patch.object(
         coordinator,
         "async_set_auto_elevate",
-        side_effect=Exception("Storage error"),
+        side_effect=QvantumApiError("Storage error"),
     ):
         with pytest.raises(HomeAssistantError) as exc_info:
             await hass.services.async_call(
@@ -191,8 +192,9 @@ async def test_set_access_level_entry_not_loaded(
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-    # Simulate unloaded entry by clearing runtime_data
-    mock_config_entry.runtime_data = None
+    # Unload the entry so state is NOT_LOADED
+    await hass.config_entries.async_unload(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
 
     with pytest.raises(ServiceValidationError) as exc_info:
         await hass.services.async_call(
@@ -219,8 +221,9 @@ async def test_toggle_auto_elevate_entry_not_loaded(
         await hass.config_entries.async_setup(mock_config_entry.entry_id)
         await hass.async_block_till_done()
 
-    # Simulate unloaded entry by clearing runtime_data
-    mock_config_entry.runtime_data = None
+    # Unload the entry so state is NOT_LOADED
+    await hass.config_entries.async_unload(mock_config_entry.entry_id)
+    await hass.async_block_till_done()
 
     with pytest.raises(ServiceValidationError) as exc_info:
         await hass.services.async_call(

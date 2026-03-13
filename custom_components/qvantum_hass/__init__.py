@@ -46,8 +46,7 @@ from .const import (
     SERVICE_SET_ACCESS_LEVEL,
     SERVICE_TOGGLE_AUTO_ELEVATE,
 )
-from .coordinator import (  # noqa: F401  # re-exported for tests
-    CachedValue,
+from .coordinator import (
     QvantumDataUpdateCoordinator,
 )
 from .definitions import get_fast_polling_metrics, get_metric_names
@@ -140,7 +139,7 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
                 translation_placeholders={"entry_id": entry_id},
             )
 
-        if entry.state is not ConfigEntryState.LOADED or entry.runtime_data is None:
+        if entry.state is not ConfigEntryState.LOADED:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
                 translation_key="service_entry_not_loaded",
@@ -151,7 +150,7 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
 
         try:
             await api.set_access_level(device_id, access_level)
-        except Exception as err:
+        except QvantumApiError as err:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="set_access_level_failed",
@@ -171,7 +170,7 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
                 translation_placeholders={"entry_id": entry_id},
             )
 
-        if entry.state is not ConfigEntryState.LOADED or entry.runtime_data is None:
+        if entry.state is not ConfigEntryState.LOADED:
             raise ServiceValidationError(
                 translation_domain=DOMAIN,
                 translation_key="service_entry_not_loaded",
@@ -192,7 +191,7 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
 
         try:
             await coordinator.async_set_auto_elevate(enable)
-        except Exception as err:
+        except QvantumApiError as err:
             raise HomeAssistantError(
                 translation_domain=DOMAIN,
                 translation_key="toggle_auto_elevate_failed",
@@ -343,11 +342,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         await api.authenticate()
     except AuthenticationError as err:
-        _LOGGER.error("Failed to authenticate with Qvantum API: %s", err)
         await api.close()
         raise ConfigEntryAuthFailed from err
     except ApiConnectionError as err:
-        _LOGGER.error("Connection error during authentication: %s", err)
         await api.close()
         raise ConfigEntryNotReady from err
 
@@ -355,12 +352,11 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     try:
         devices = await api.get_devices()
     except QvantumApiError as err:
-        _LOGGER.error("Failed to get devices from Qvantum API: %s", err)
         await api.close()
         raise ConfigEntryNotReady from err
 
     if not devices:
-        _LOGGER.warning("No devices found for Qvantum account")
+        _LOGGER.warning("No devices found for account")
         await api.close()
         raise ConfigEntryError("No devices found for this account")
 
@@ -447,10 +443,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 await fast_coordinator.async_config_entry_first_refresh()
             _LOGGER.debug("First refresh successful for device %s", device["id"])
         except TimeoutError as err:
-            _LOGGER.error(
-                "First refresh timed out for device %s after 60 seconds",
-                device["id"],
-            )
             raise ConfigEntryNotReady(
                 f"Device {device['id']} not responding (timeout)"
             ) from err
@@ -459,7 +451,6 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 "Failed first refresh for device %s: %s",
                 device["id"],
                 err,
-                exc_info=True,
             )
             raise ConfigEntryNotReady(
                 f"Unexpected error during first refresh for device {device['id']}: {err}"

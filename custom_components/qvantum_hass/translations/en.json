@@ -62,6 +62,12 @@
     },
     "cancel_extra_hot_water_failed": {
       "message": "Failed to cancel extra hot water on the device."
+    },
+    "set_value_failed": {
+      "message": "Failed to set the value on the device. Check your connection and try again."
+    },
+    "elevate_access_failed": {
+      "message": "Failed to elevate access level on the device."
     }
   },
   "services": {
@@ -545,21 +551,6 @@
       },
       "vacation_mode": {
         "name": "Vacation mode"
-      },
-      "cooling_enabled": {
-        "name": "Cooling enabled"
-      },
-      "dew_protection": {
-        "name": "Dew point protection"
-      },
-      "sg_enabled": {
-        "name": "SG ready"
-      },
-      "btxmounted": {
-        "name": "BTX mounted"
-      },
-      "bt4mounted": {
-        "name": "BT4 mounted"
       },
       "auto_elevate_access": {
         "name": "Auto-elevate access"

@@ -29,7 +29,7 @@ class TestCachedValue:
 
     def test_cache_returns_none_when_empty(self):
         """CachedValue.get() returns None when no value has been set."""
-        from custom_components.qvantum_hass import CachedValue
+        from custom_components.qvantum_hass.coordinator import CachedValue
 
         cache = CachedValue[str](timedelta(hours=1))
 
@@ -38,7 +38,7 @@ class TestCachedValue:
 
     def test_cache_returns_value_when_fresh(self):
         """CachedValue.get() returns the stored value before TTL expires."""
-        from custom_components.qvantum_hass import CachedValue
+        from custom_components.qvantum_hass.coordinator import CachedValue
 
         cache = CachedValue[str](timedelta(hours=1))
         cache.set("hello")
@@ -48,7 +48,7 @@ class TestCachedValue:
 
     def test_cache_returns_none_after_expiry(self):
         """CachedValue.get() returns None after the TTL has elapsed."""
-        from custom_components.qvantum_hass import CachedValue
+        from custom_components.qvantum_hass.coordinator import CachedValue
         from unittest.mock import patch
         from datetime import UTC, datetime
 

@@ -62,6 +62,12 @@
     },
     "cancel_extra_hot_water_failed": {
       "message": "Det gick inte att avbryta extra varmvatten på enheten."
+    },
+    "set_value_failed": {
+      "message": "Det gick inte att ange värdet på enheten. Kontrollera anslutningen och försök igen."
+    },
+    "elevate_access_failed": {
+      "message": "Det gick inte att höja åtkomstnivån på enheten."
     }
   },
   "services": {
@@ -551,21 +557,6 @@
       },
       "vacation_mode": {
         "name": "Semesterläge"
-      },
-      "cooling_enabled": {
-        "name": "Kyla aktiverad"
-      },
-      "dew_protection": {
-        "name": "Daggpunktsskydd"
-      },
-      "sg_enabled": {
-        "name": "SG Ready"
-      },
-      "btxmounted": {
-        "name": "BTX monterad"
-      },
-      "bt4mounted": {
-        "name": "BT4 monterad"
       },
       "auto_elevate_access": {
         "name": "Auto-höj åtkomst"

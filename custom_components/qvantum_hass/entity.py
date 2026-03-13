@@ -32,11 +32,12 @@ def create_device_info(device: dict[str, Any]) -> DeviceInfo:
         or device.get("serialNumber")
         or device.get("serial", "")
     )
+    model = device.get("model", "Heat Pump")
     return DeviceInfo(
         identifiers={(DOMAIN, device["id"])},
-        name=f"Qvantum Heat Pump {serial}",
+        name=model,
         manufacturer=MANUFACTURER,
-        model=device.get("model", "Heat Pump"),
+        model=model,
         serial_number=serial or None,
     )
 

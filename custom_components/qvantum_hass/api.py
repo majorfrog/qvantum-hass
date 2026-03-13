@@ -360,7 +360,7 @@ class QvantumApi:
         }
         url = f"{self.auth_server}/v1/accounts:signInWithPassword?key={self.api_key}"
 
-        _LOGGER.debug("Authenticating with Qvantum API")
+        _LOGGER.debug("Authenticating")
 
         try:
             session = self._get_session()
@@ -374,7 +374,7 @@ class QvantumApi:
             ) as response:
                 if response.status == 200:
                     self.tokens = await response.json()
-                    _LOGGER.info("Successfully authenticated with Qvantum API")
+                    _LOGGER.info("Successfully authenticated")
                 else:
                     error_data = None
                     with contextlib.suppress(ValueError, aiohttp.ContentTypeError):

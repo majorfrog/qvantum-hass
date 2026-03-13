@@ -18,9 +18,11 @@ from homeassistant.components.button import ButtonEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .api import QvantumApiError
+from .const import DOMAIN
 from .coordinator import QvantumDataUpdateCoordinator
 from .entity import QvantumEntity
 from .models import EntitySource, QvantumEntityDef
@@ -146,6 +148,10 @@ class QvantumExtraHotWaterButton(QvantumEntity, ButtonEntity):  # pylint: disabl
                 "Failed to activate extra hot water: %s",
                 err,
             )
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="activate_extra_hot_water_failed",
+            ) from err
 
 
 class QvantumRefreshButton(QvantumEntity, ButtonEntity):  # pylint: disable=abstract-method
@@ -204,3 +210,7 @@ class QvantumElevateAccessButton(QvantumEntity, ButtonEntity):  # pylint: disabl
                 "Failed to elevate access level: %s",
                 err,
             )
+            raise HomeAssistantError(
+                translation_domain=DOMAIN,
+                translation_key="elevate_access_failed",
+            ) from err
