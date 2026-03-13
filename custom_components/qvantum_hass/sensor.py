@@ -1008,7 +1008,7 @@ class QvantumActiveAlarmsSensor(QvantumSensorBase):
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
 
     @property
-    def native_value(self) -> str:
+    def native_value(self) -> str | None:
         """Return a summary of active alarms."""
         if (
             self.coordinator.data
