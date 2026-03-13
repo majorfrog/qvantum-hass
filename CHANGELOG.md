@@ -130,22 +130,3 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - N/A (initial release)
-
-### Security
-
-- Secure storage of credentials via Home Assistant config entries
-- Automatic token refresh to minimize credential exposure
-
-## Migration from qvantum2mqtt
-
-This integration replaces the qvantum2mqtt project with the following improvements:
-
-- No MQTT broker required
-- Native Home Assistant integration
-- UI-based configuration
-- Automatic device discovery
-- All entities from qvantum2mqtt are supported
-- Better entity organization and naming
-- Proper device classes and units
-
-See ENTITY_MAPPING.md for detailed entity mapping information.

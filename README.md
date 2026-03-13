@@ -129,23 +129,24 @@ A comprehensive Home Assistant integration for Qvantum heat pumps, providing rea
    - Discover all heat pumps on your account
    - Create devices and entities for each heat pump
 
-### Options
-
-After setup, you can configure polling intervals:
-
-1. Go to **Settings** → **Devices & Services**
-2. Find the Qvantum Heat Pump integration
-3. Click **Configure**
-4. Adjust settings:
-   - **Normal Scan Interval**: How often to poll for temperature/status data (10-300 seconds, default: 30)
-   - **Fast Scan Interval**: How often to poll for power/current data (5-60 seconds, default: 5)
-
 > **Note**: The integration uses two separate polling intervals for optimal performance:
 >
-> - **Fast polling (5s)**: For power consumption and current sensors - provides real-time energy monitoring
-> - **Normal polling (30s)**: For temperature and status sensors - reduces unnecessary API load
->
-> Lower intervals provide more responsive data but may impact API rate limits and system performance.
+> - **Fast polling (5s)**: For power consumption and current sensors — real-time energy monitoring
+> - **Normal polling (30s)**: For temperature and status sensors — reduces unnecessary API load
+
+### Finding Your Device ID
+
+To use services (like activating extra hot water), you need the Qvantum-assigned device ID.
+The easiest way to find it is in **Developer Tools** → **States**: look for any Qvantum entity
+and check its attributes — there will be a `device_id` attribute containing the identifier.
+You can also see it in **Settings** → **Devices & Services** → Qvantum → your device page.
+
+The `config_entry_id` required by some services (`set_access_level`, `toggle_auto_elevate`) can
+be found in **Developer Tools** → **Template**:
+
+```
+{{ config_entries.async_entries('qvantum_hass')[0].entry_id }}
+```
 
 ## Entities
 
@@ -178,6 +179,11 @@ The integration creates comprehensive entities for each heat pump device. Most a
 - Compressor speed
 - Valve positions
 - Advanced calculated values
+- Heat Emitter Type (Underfloor Heating / Radiators)
+- BTX Configuration (diagnostic enum sensor)
+- BT4 Configuration (diagnostic enum sensor)
+- Vacation Start / Vacation Stop (timestamp sensors)
+- Wi-Fi SSID (diagnostic text sensor)
 
 ### Controls
 
@@ -192,6 +198,7 @@ The integration creates comprehensive entities for each heat pump device. Most a
 - Heating Curve Shift (enabled by default, -9 to +9)
 - SmartControl Mode
 - Operation Mode
+- Manual Mode (Off, Heating, Cooling)
 - DHW Priority Time
 - DHW Outlet Temperature
 - Tap Water Capacity Target
@@ -203,7 +210,6 @@ The integration creates comprehensive entities for each heat pump device. Most a
 - Extra Hot Water (enabled by default)
 - SmartControl Heating
 - SmartControl DHW
-- Manual Operation Modes
 - Vacation Mode (enabled by default)
 - Auto-Elevate Access
 - Various system settings (disabled by default)
@@ -220,7 +226,7 @@ The integration creates comprehensive entities for each heat pump device. Most a
 
 Activate extra hot water mode for a specified duration (1-24 hours).
 
-**Service:** `qvantum.activate_extra_hot_water`
+**Service:** `qvantum_hass.activate_extra_hot_water`
 
 **Parameters:**
 
@@ -231,7 +237,7 @@ Activate extra hot water mode for a specified duration (1-24 hours).
 
 ```yaml
 # Automation example - activate for 2 hours
-service: qvantum.activate_extra_hot_water
+service: qvantum_hass.activate_extra_hot_water
 data:
   device_id: "your_device_id_here"
   duration: 2
@@ -240,7 +246,7 @@ data:
 activate_hot_water_3h:
   alias: "Extended Hot Water Boost"
   sequence:
-    - service: qvantum.activate_extra_hot_water
+    - service: qvantum_hass.activate_extra_hot_water
       data:
         device_id: "your_device_id_here"
         duration: 3
@@ -250,7 +256,7 @@ activate_hot_water_3h:
 
 Cancel active extra hot water mode.
 
-**Service:** `qvantum.cancel_extra_hot_water`
+**Service:** `qvantum_hass.cancel_extra_hot_water`
 
 **Parameters:**
 
@@ -259,12 +265,60 @@ Cancel active extra hot water mode.
 **Example:**
 
 ```yaml
-service: qvantum.cancel_extra_hot_water
+service: qvantum_hass.cancel_extra_hot_water
 data:
   device_id: "your_device_id_here"
 ```
 
 **Note:** You can also use the Extra Hot Water switch entity to turn on (1 hour) or turn off the boost mode.
+
+### Set Access Level
+
+Set the service access level for a specific device.
+
+**Service:** `qvantum_hass.set_access_level`
+
+**Parameters:**
+
+- `config_entry_id`: The config entry ID for this integration instance (required)
+- `device_id`: Your Qvantum device ID (required)
+- `access_level`: The access level to set — `"service"` or `"user"` (required)
+
+**Example:**
+
+```yaml
+service: qvantum_hass.set_access_level
+data:
+  config_entry_id: "your_config_entry_id"
+  device_id: "your_device_id_here"
+  access_level: "service"
+```
+
+### Toggle Auto-Elevate
+
+Enable or disable automatic access-level elevation for a device. When enabled, the integration
+automatically elevates to service technician level to read advanced settings.
+
+**Service:** `qvantum_hass.toggle_auto_elevate`
+
+**Parameters:**
+
+- `config_entry_id`: The config entry ID for this integration instance (required)
+- `device_id`: Your Qvantum device ID (required)
+- `enable`: `true` to enable auto-elevate, `false` to disable (required)
+
+**Example:**
+
+```yaml
+service: qvantum_hass.toggle_auto_elevate
+data:
+  config_entry_id: "your_config_entry_id"
+  device_id: "your_device_id_here"
+  enable: true
+```
+
+> **Tip:** The **Auto-Elevate Access** switch entity is an easier way to toggle this — it
+> has the same effect without needing to call the service directly.
 
 ## Automation Examples
 
@@ -391,7 +445,7 @@ automation:
         entity_id: binary_sensor.connectivity
         state: "on"
     action:
-      - service: qvantum.activate_extra_hot_water
+      - service: qvantum_hass.activate_extra_hot_water
         data:
           device_id: "your_device_id_here"
           duration: 2
@@ -402,96 +456,6 @@ automation:
 - Home Assistant 2024.1.0 or newer
 - Active internet connection
 - Qvantum account with registered heat pump
-
-## Installation
-
-### HACS (Recommended)
-
-1. Make sure you have [HACS](https://hacs.xyz/) installed in your Home Assistant instance
-2. Add this repository as a custom repository in HACS:
-   - Click on HACS in the sidebar
-   - Click on "Integrations"
-   - Click the three dots in the top right corner
-   - Select "Custom repositories"
-   - Add `https://github.com/majorfrog/qvantum-hass`
-   - Select "Integration" as the category
-3. Click "Install"
-4. Restart Home Assistant
-
-### Manual Installation
-
-1. Download the latest release from the [releases page](https://github.com/majorfrog/qvantum-hass/releases)
-2. Extract the ZIP file
-3. Copy the `qvantum_hass` folder to your Home Assistant's `custom_components/` directory (inside your config folder)
-   - Path should be: `<config_dir>/custom_components/qvantum_hass/`
-4. Restart Home Assistant
-
-## Configuration
-
-1. Go to **Settings** → **Devices & Services**
-2. Click **+ Add Integration**
-3. Search for "Qvantum"
-4. Enter your Qvantum account credentials:
-   - **Email**: Your Qvantum account email
-   - **Password**: Your Qvantum account password
-
-The integration will automatically discover all heat pumps associated with your account.
-
-### Finding Your Device ID
-
-To use the services (like activating extra hot water), you'll need your device ID. You can find it in:
-
-- The entity IDs: `sensor.qvantum_heat_pump_<device_id>_*`
-- Developer Tools → States → look for any qvantum entity and check the device ID in the entity_id
-
-## Available Entities
-
-Once configured, the integration will create the following types of entities for each heat pump:
-
-### Standard Metrics (from Public API)
-
-- Outdoor Temperature
-- Indoor Temperature
-- Heating Flow Temperature
-- Heating Flow Temperature Target
-- Tap Water Tank Temperature
-- Tap Water Capacity
-- DHW Start/Stop Temperatures
-- Total Energy
-- Compressor Energy
-- Additional Energy
-
-### Extended Internal Metrics
-
-- **Temperature Sensors**: BT1-BT34 (various temperature points)
-- **Pressure Sensors**: BP1-BP2 (low and high pressure)
-- **Flow Sensors**: BF1 (DHW flow rate)
-- **Speed Controls**: Compressor speed, pump speeds, fan speed
-- **Relay States**: Additional heating relays (L1-L3), diverting valves
-- **Position Sensors**: Shunt valve position
-
-### Device Information
-
-- Connectivity Status
-- Service Access Status
-- Display Firmware Version
-- Control Circuit Firmware Version
-- Inverter Firmware Version
-- Device Uptime
-
-### Controllable Settings
-
-All numeric and boolean settings exposed by the Qvantum API can be controlled through Home Assistant, including:
-
-- Indoor temperature target
-- Heating curve shift (indoor temperature offset)
-- DHW capacity target
-- DHW start/stop temperatures
-- Various mode switches
-
-## Data Update
-
-The integration polls the Qvantum API every 30 seconds by default to update all entity states. This interval is optimized to balance between having up-to-date information and not overloading the API.
 
 ## Troubleshooting
 
@@ -557,10 +521,8 @@ The integration polls the Qvantum API every 30 seconds by default to update all 
 
 **Solutions**:
 
-1. Increase the scan interval: **Settings** → **Devices & Services** → Qvantum → **Configure**
-2. Recommended minimum: 30 seconds (default)
-3. Disable unused entities to reduce processing load
-4. Check for errors in logs that might cause excessive retries
+1. Disable unused entities to reduce processing load
+2. Check for errors in logs that might cause excessive retries
 
 ### Debug Logging
 
@@ -589,10 +551,8 @@ The integration is configured to be respectful of API limits:
 
 If you experience rate limiting:
 
-1. Increase the normal scan interval to 60+ seconds (Settings → Configure)
-2. Increase the fast scan interval to 10-15 seconds if not monitoring real-time power
-3. Reduce number of enabled entities
-4. Check logs for excessive API calls
+1. Reduce the number of enabled entities
+2. Check logs for excessive API calls
 
 ### Getting Help
 
