@@ -28,11 +28,13 @@ from homeassistant.const import CONF_EMAIL, CONF_PASSWORD, Platform
 from homeassistant.core import HomeAssistant, ServiceCall
 from homeassistant.exceptions import (
     ConfigEntryAuthFailed,
+    ConfigEntryError,
     ConfigEntryNotReady,
     HomeAssistantError,
     ServiceValidationError,
 )
 from homeassistant.helpers import config_validation as cv, device_registry as dr
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 from homeassistant.helpers.storage import Store
 
 from .api import ApiConnectionError, AuthenticationError, QvantumApi, QvantumApiError
@@ -334,6 +336,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         email=entry.data[CONF_EMAIL],
         password=entry.data[CONF_PASSWORD],
         api_key=DEFAULT_API_KEY,
+        session=async_get_clientsession(hass),
     )
 
     # Try to authenticate
@@ -359,7 +362,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not devices:
         _LOGGER.warning("No devices found for Qvantum account")
         await api.close()
-        return False
+        raise ConfigEntryError("No devices found for this account")
 
     # Remove device-registry entries that no longer exist in the account.
     # This prevents orphaned entities from accumulating when a device is deleted
@@ -458,7 +461,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
                 err,
                 exc_info=True,
             )
-            raise
+            raise ConfigEntryNotReady(
+                f"Unexpected error during first refresh for device {device['id']}: {err}"
+            ) from err
 
         coordinators[device["id"]] = coordinator
         fast_coordinators[device["id"]] = fast_coordinator
@@ -479,8 +484,7 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
 async def async_unload_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     """Unload a config entry."""
     if unload_ok := await hass.config_entries.async_unload_platforms(entry, PLATFORMS):
-        api = entry.runtime_data.get("api") if entry.runtime_data else None
-        if api:
-            await api.close()
+        if entry.runtime_data:
+            await entry.runtime_data["api"].close()
 
     return unload_ok

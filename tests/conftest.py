@@ -65,6 +65,23 @@ TEST_USER_INPUT = {
 }
 
 
+@pytest.fixture(autouse=True)
+def mock_aiohttp_client_session():
+    """Mock async_get_clientsession to avoid requiring the full HA network stack.
+
+    async_get_clientsession creates a DNS resolver backed by zeroconf which
+    requires the network component to be loaded.  In the custom-component
+    test environment that component is not set up, so we replace the call
+    with a lightweight MagicMock that satisfies QvantumApi's constructor.
+    """
+    mock_session = MagicMock()
+    with patch(
+        "custom_components.qvantum_hass.async_get_clientsession",
+        return_value=mock_session,
+    ):
+        yield mock_session
+
+
 @pytest.fixture
 async def hass():
     """Fixture to provide a test instance of Home Assistant."""

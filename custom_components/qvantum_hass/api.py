@@ -99,6 +99,7 @@ class QvantumApi:
         internal_api_endpoint: str = DEFAULT_INTERNAL_API_ENDPOINT,
         auth_server: str = DEFAULT_AUTH_SERVER,
         token_server: str = DEFAULT_TOKEN_SERVER,
+        session: aiohttp.ClientSession | None = None,
     ) -> None:
         """Initialize the async API client.
 
@@ -110,6 +111,10 @@ class QvantumApi:
             internal_api_endpoint: Base URL for internal API requests
             auth_server: Firebase auth server URL
             token_server: Firebase token server URL
+            session: Optional aiohttp.ClientSession to reuse (e.g. from
+                ``async_get_clientsession(hass)``). When provided the session
+                is *not* closed by :meth:`close` — the caller owns its
+                lifecycle.
         """
         self.email = email
         self.password = password
@@ -121,7 +126,10 @@ class QvantumApi:
 
         self.tokens: dict[str, Any] | None = None
         self.token_expiry: datetime | None = None
-        self.session: aiohttp.ClientSession | None = None
+        # If a session is injected externally (e.g. from HA's aiohttp_client),
+        # we must NOT close it in close() — the caller owns its lifecycle.
+        self._external_session: aiohttp.ClientSession | None = session
+        self.session: aiohttp.ClientSession | None = session
 
     def _get_session(self) -> aiohttp.ClientSession:
         """Get or create aiohttp session.
@@ -137,10 +145,15 @@ class QvantumApi:
         return self.session
 
     async def close(self) -> None:
-        """Close the aiohttp session."""
-        if self.session:
+        """Close the aiohttp session.
+
+        Only closes the session if it was created internally.  Externally
+        injected sessions (e.g. from ``async_get_clientsession(hass)``) are
+        managed by the caller and are left open.
+        """
+        if self.session and not self._external_session:
             await self.session.close()
-            self.session = None
+        self.session = None
 
     async def _ensure_tokens_valid(self) -> None:
         """Ensure we have valid authentication tokens."""
@@ -284,7 +297,7 @@ class QvantumApi:
             "Authorization": f"Bearer {self.tokens['idToken']}",
         }
 
-        _LOGGER.debug("Making PATCH request to %s with data %s", url, data)
+        _LOGGER.debug("Making PATCH request to %s", url)
 
         try:
             session = self._get_session()
@@ -311,7 +324,7 @@ class QvantumApi:
             "Authorization": f"Bearer {self.tokens['idToken']}",
         }
 
-        _LOGGER.debug("Making POST request to %s with data %s", url, data)
+        _LOGGER.debug("Making POST request to %s", url)
 
         try:
             session = self._get_session()

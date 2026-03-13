@@ -19,6 +19,7 @@ from homeassistant.components.number import NumberEntity
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import EntityCategory
 from homeassistant.core import HomeAssistant
+from homeassistant.exceptions import HomeAssistantError
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from .api import QvantumApiError
@@ -226,3 +227,7 @@ class QvantumNumberEntity(QvantumEntity, NumberEntity):  # pylint: disable=abstr
                 value,
                 err,
             )
+            raise HomeAssistantError(
+                translation_domain="qvantum_hass",
+                translation_key="set_value_failed",
+            ) from err

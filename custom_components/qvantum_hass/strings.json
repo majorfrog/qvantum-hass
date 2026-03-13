@@ -124,6 +124,9 @@
     },
     "cancel_extra_hot_water_failed": {
       "message": "Failed to cancel extra hot water on the device."
+    },
+    "set_value_failed": {
+      "message": "Failed to set the value on the device. Check your connection and try again."
     }
   },
   "entity": {

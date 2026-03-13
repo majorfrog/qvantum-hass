@@ -47,6 +47,7 @@ ENTITY_DEFS: Final[list[QvantumEntityDef]] = [
         "Extra hot water boost (indefinite, via command API)",
         source=EntitySource.SETTINGS,
         api_key="extra_tap_water",
+        entity_type="extra_hot_water",
     ),
     QvantumEntityDef(
         "smart_control_heating",
@@ -54,6 +55,7 @@ ENTITY_DEFS: Final[list[QvantumEntityDef]] = [
         source=EntitySource.INTERNAL_METRICS,
         entity_category=EntityCategory.CONFIG,
         api_key="enable_sc_sh",
+        entity_type="smart_control",
     ),
     QvantumEntityDef(
         "smart_control_dhw",
@@ -61,6 +63,7 @@ ENTITY_DEFS: Final[list[QvantumEntityDef]] = [
         source=EntitySource.INTERNAL_METRICS,
         entity_category=EntityCategory.CONFIG,
         api_key="enable_sc_dhw",
+        entity_type="smart_control",
     ),
     QvantumEntityDef(
         "manual_dhw",
@@ -68,6 +71,7 @@ ENTITY_DEFS: Final[list[QvantumEntityDef]] = [
         source=EntitySource.INTERNAL_METRICS,
         entity_category=EntityCategory.CONFIG,
         api_key="op_man_dhw",
+        entity_type="manual_op",
     ),
     QvantumEntityDef(
         "manual_additional_heat",
@@ -75,6 +79,7 @@ ENTITY_DEFS: Final[list[QvantumEntityDef]] = [
         source=EntitySource.INTERNAL_METRICS,
         entity_category=EntityCategory.CONFIG,
         api_key="op_man_addition",
+        entity_type="manual_op",
     ),
     QvantumEntityDef(
         "manual_cooling",
@@ -82,6 +87,7 @@ ENTITY_DEFS: Final[list[QvantumEntityDef]] = [
         source=EntitySource.INTERNAL_METRICS,
         entity_category=EntityCategory.CONFIG,
         api_key="op_man_cooling",
+        entity_type="manual_op",
     ),
     QvantumEntityDef(
         "vacation_mode",
@@ -94,15 +100,45 @@ ENTITY_DEFS: Final[list[QvantumEntityDef]] = [
         "Auto-renew elevated service access",
         source=EntitySource.COORDINATOR,
         entity_category=EntityCategory.DIAGNOSTIC,
+        entity_type="auto_elevate",
     ),
 ]
 
 _LOGGER = logging.getLogger(__name__)
 
+# Icons for manual operation switches, keyed by api_key.
+_MANUAL_OP_ICONS: dict[str, str] = {
+    "op_man_dhw": "mdi:water-outline",
+    "op_man_addition": "mdi:transmission-tower-import",
+    "op_man_cooling": "mdi:snowflake",
+}
+
 
 def get_entity_def(key: str) -> QvantumEntityDef | None:
     """Look up an entity definition by key within this platform's entity definitions."""
     return next((e for e in ENTITY_DEFS if e.key == key), None)
+
+
+def _create_switch_entity(
+    coordinator: QvantumDataUpdateCoordinator,
+    device: dict[str, Any],
+    api: Any,
+    entity_def: QvantumEntityDef,
+) -> QvantumEntity:
+    """Dispatch to the correct switch class based on entity_def.entity_type."""
+    api_key = entity_def.api_key or entity_def.key
+    et = entity_def.entity_type
+    if et == "extra_hot_water":
+        return QvantumExtraHotWaterSwitch(coordinator, device, api)
+    if et == "smart_control":
+        return QvantumSmartControlSwitch(coordinator, device, api, api_key)
+    if et == "manual_op":
+        icon = _MANUAL_OP_ICONS.get(api_key, "mdi:toggle-switch")
+        return QvantumManualOperationSwitch(coordinator, device, api, api_key, icon)
+    if et == "auto_elevate":
+        return QvantumAutoElevateAccessSwitch(coordinator, device, api)
+    # Default: generic settings-backed switch
+    return QvantumSwitchEntity(coordinator, device, entity_def)
 
 
 async def async_setup_entry(
@@ -116,93 +152,11 @@ async def async_setup_entry(
     devices = data["devices"]
     api = data["api"]
 
-    entities = []
-
-    for device in devices:
-        device_id = device["id"]
-        coordinator = coordinators[device_id]
-
-        # Add extra hot water switch (uses command API)
-        entities.append(
-            QvantumExtraHotWaterSwitch(
-                coordinator,
-                device,
-                api,
-            )
-        )
-
-        # Add SmartControl enable switches
-        entities.append(
-            QvantumSmartControlSwitch(
-                coordinator,
-                device,
-                api,
-                "enable_sc_sh",
-            )
-        )
-        entities.append(
-            QvantumSmartControlSwitch(
-                coordinator,
-                device,
-                api,
-                "enable_sc_dhw",
-            )
-        )
-
-        # Add Manual Operation Mode sub-switches
-        entities.append(
-            QvantumManualOperationSwitch(
-                coordinator,
-                device,
-                api,
-                "op_man_dhw",
-                "mdi:water-outline",
-            )
-        )
-        entities.append(
-            QvantumManualOperationSwitch(
-                coordinator,
-                device,
-                api,
-                "op_man_addition",
-                "mdi:transmission-tower-import",
-            )
-        )
-        entities.append(
-            QvantumManualOperationSwitch(
-                coordinator,
-                device,
-                api,
-                "op_man_cooling",
-                "mdi:snowflake",
-            )
-        )
-
-        # Add settings-based switch entities from entity definitions
-        # (replaces dynamic creation from settings_inventory)
-        entities.extend(
-            QvantumSwitchEntity(
-                coordinator,
-                device,
-                entity_def,
-            )
-            for entity_def in ENTITY_DEFS
-            if (
-                entity_def.source == EntitySource.SETTINGS
-                and entity_def.key not in ("extra_hot_water",)  # Handled above
-            )
-        )
-
-        # Add auto-elevate access switch
-        entities.append(
-            QvantumAutoElevateAccessSwitch(
-                coordinator,
-                device,
-                api,
-            )
-        )
-
-    async_add_entities(entities)
+    async_add_entities(
+        _create_switch_entity(coordinators[device["id"]], device, api, entity_def)
+        for device in devices
+        for entity_def in ENTITY_DEFS
+    )
 
 
 class QvantumSwitchEntity(QvantumEntity, SwitchEntity):  # pylint: disable=abstract-method

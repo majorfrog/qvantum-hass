@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 from typing import Any
 
 from homeassistant.helpers.device_registry import DeviceInfo
@@ -9,6 +10,8 @@ from homeassistant.helpers.update_coordinator import CoordinatorEntity
 
 from .const import DOMAIN, MANUFACTURER
 from .coordinator import QvantumDataUpdateCoordinator
+
+_LOGGER = logging.getLogger(__name__)
 
 
 def create_device_info(device: dict[str, Any]) -> DeviceInfo:
@@ -67,6 +70,7 @@ class QvantumEntity(CoordinatorEntity[QvantumDataUpdateCoordinator]):
         self._device = device
         self._api = api
         self._attr_device_info = create_device_info(device)
+        self._unavailable_logged = False
 
     @property
     def available(self) -> bool:
@@ -88,6 +92,20 @@ class QvantumEntity(CoordinatorEntity[QvantumDataUpdateCoordinator]):
             and "connectivity" in self.coordinator.data["status"]
         ):
             connectivity = self.coordinator.data["status"]["connectivity"]
-            return connectivity.get("connected", False)
+            connected = connectivity.get("connected", False)
+            if not connected:
+                if not self._unavailable_logged:
+                    _LOGGER.info(
+                        "Device %s is not connected",
+                        self._device.get("id", "unknown"),
+                    )
+                    self._unavailable_logged = True
+                return False
+            if self._unavailable_logged:
+                _LOGGER.info(
+                    "Device %s is back online",
+                    self._device.get("id", "unknown"),
+                )
+                self._unavailable_logged = False
 
         return True

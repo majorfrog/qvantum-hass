@@ -833,6 +833,7 @@ class QvantumInternalMetricSensor(QvantumSensorBase):
             self._attr_device_class = SensorDeviceClass.FREQUENCY
             self._attr_native_unit_of_measurement = UnitOfFrequency.HERTZ
         elif unit == "L/min":
+            self._attr_device_class = SensorDeviceClass.VOLUME_FLOW_RATE
             self._attr_native_unit_of_measurement = (
                 UnitOfVolumeFlowRate.LITERS_PER_MINUTE
             )
