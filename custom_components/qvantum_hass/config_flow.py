@@ -19,7 +19,9 @@ import voluptuous as vol
 from homeassistant import config_entries
 from homeassistant.config_entries import ConfigFlowResult
 from homeassistant.const import CONF_EMAIL, CONF_PASSWORD
+from homeassistant.core import HomeAssistant
 from homeassistant.helpers import selector
+from homeassistant.helpers.aiohttp_client import async_get_clientsession
 
 from .api import ApiConnectionError, AuthenticationError, QvantumApi, QvantumApiError
 from .const import DEFAULT_API_KEY, DOMAIN
@@ -52,7 +54,7 @@ STEP_REAUTH_SCHEMA = vol.Schema(
 )
 
 
-async def _validate_credentials(email: str, password: str) -> None:
+async def _validate_credentials(hass: HomeAssistant, email: str, password: str) -> None:
     """Authenticate and verify at least one device is reachable.
 
     Raises:
@@ -60,7 +62,12 @@ async def _validate_credentials(email: str, password: str) -> None:
         ApiConnectionError: Could not reach the API.
         QvantumApiError: Unexpected API error.
     """
-    api = QvantumApi(email=email, password=password, api_key=DEFAULT_API_KEY)
+    api = QvantumApi(
+        email=email,
+        password=password,
+        api_key=DEFAULT_API_KEY,
+        session=async_get_clientsession(hass),
+    )
     try:
         await api.authenticate()
         await api.get_devices()
@@ -83,7 +90,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # pylint: disable=a
         if user_input is not None:
             try:
                 await _validate_credentials(
-                    user_input[CONF_EMAIL], user_input[CONF_PASSWORD]
+                    self.hass, user_input[CONF_EMAIL], user_input[CONF_PASSWORD]
                 )
             except AuthenticationError as err:
                 _LOGGER.warning("Authentication failed: %s", err)
@@ -97,6 +104,8 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # pylint: disable=a
             else:
                 await self.async_set_unique_id(user_input[CONF_EMAIL])
                 self._abort_if_unique_id_configured()
+                # TODO(#12): Use user_input[CONF_EMAIL] as title to distinguish
+                # multi-account setups once HA supports dynamic entry titles.
                 return self.async_create_entry(
                     title="Qvantum Heat Pump",
                     data=user_input,
@@ -122,7 +131,7 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # pylint: disable=a
         if user_input is not None:
             email = reauth_entry.data[CONF_EMAIL]
             try:
-                await _validate_credentials(email, user_input[CONF_PASSWORD])
+                await _validate_credentials(self.hass, email, user_input[CONF_PASSWORD])
             except AuthenticationError as err:
                 _LOGGER.warning("Reauth failed: %s", err)
                 errors["base"] = "invalid_auth"
@@ -155,7 +164,9 @@ class ConfigFlow(config_entries.ConfigFlow, domain=DOMAIN):  # pylint: disable=a
         if user_input is not None:
             try:
                 await _validate_credentials(
-                    user_input[CONF_EMAIL], user_input[CONF_PASSWORD]
+                    self.hass,
+                    user_input[CONF_EMAIL],
+                    user_input[CONF_PASSWORD],
                 )
             except AuthenticationError as err:
                 _LOGGER.warning("Reconfigure auth failed: %s", err)

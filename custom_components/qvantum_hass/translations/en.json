@@ -350,7 +350,7 @@
       "heating_prioritytimeleft": {
         "name": "Heating priority time remaining"
       },
-      "cooling_priotitytimeleft": {
+      "cooling_prioritytimeleft": {
         "name": "Cooling priority time remaining"
       },
       "switch_state": {

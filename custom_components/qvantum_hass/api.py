@@ -790,9 +790,9 @@ class QvantumApi:
                 }
             }
         else:
-            # Calculate stop time (current time + hours)
-            stop_time = datetime.now() + timedelta(hours=hours)
-            # Format as ISO 8601 string
+            # Calculate stop time (current UTC time + hours)
+            stop_time = datetime.now(UTC) + timedelta(hours=hours)
+            # Format as ISO 8601 UTC string
             stop_time_str = stop_time.strftime("%Y-%m-%dT%H:%M:%S.000Z")
 
             command_payload = {

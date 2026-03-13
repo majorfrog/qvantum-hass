@@ -438,7 +438,7 @@ ENTITY_DEFS: Final[list[QvantumEntityDef]] = [
         enabled_by_default=True,
     ),
     QvantumEntityDef(
-        "cooling_priotitytimeleft",
+        "cooling_prioritytimeleft",
         "Cooling priority time remaining",
         unit="minutes",
         enabled_by_default=True,
@@ -958,8 +958,8 @@ class QvantumAlarmCountSensor(QvantumSensorBase):
         """Initialize the sensor."""
         super().__init__(coordinator, device, "alarm_count", "alarm_count")
         self._attr_entity_category = EntityCategory.DIAGNOSTIC
-        self._attr_native_unit_of_measurement = "alarms"
-        self._attr_state_class = None
+        self._attr_native_unit_of_measurement = None
+        self._attr_state_class = SensorStateClass.MEASUREMENT
 
     @property
     def native_value(self) -> int:

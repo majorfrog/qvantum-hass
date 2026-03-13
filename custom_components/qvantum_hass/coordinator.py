@@ -155,6 +155,14 @@ class QvantumDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
         # Auto-elevate access control flag - will be loaded from store
         # Default to False for new devices
         self.auto_elevate_enabled = False
+        # Linked coordinator (e.g. fast ↔ normal) that must stay in sync
+        self._linked_coordinator: QvantumDataUpdateCoordinator | None = None
+
+    def set_linked_coordinator(
+        self, coordinator: QvantumDataUpdateCoordinator
+    ) -> None:
+        """Link another coordinator to keep auto_elevate_enabled in sync."""
+        self._linked_coordinator = coordinator
 
     async def async_load_auto_elevate_state(self) -> None:
         """Load auto-elevate state from storage."""
@@ -186,6 +194,8 @@ class QvantumDataUpdateCoordinator(DataUpdateCoordinator[dict[str, Any]]):
     async def async_set_auto_elevate(self, enabled: bool) -> None:
         """Set auto-elevate state and persist to storage."""
         self.auto_elevate_enabled = enabled
+        if self._linked_coordinator is not None:
+            self._linked_coordinator.auto_elevate_enabled = enabled
 
         # Load current data
         data = await self._store.async_load() or {}

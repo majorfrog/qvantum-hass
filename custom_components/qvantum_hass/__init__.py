@@ -43,6 +43,8 @@ from .const import (
     DEFAULT_FAST_SCAN_INTERVAL,
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
+    SERVICE_ACTIVATE_EXTRA_HOT_WATER,
+    SERVICE_CANCEL_EXTRA_HOT_WATER,
     SERVICE_SET_ACCESS_LEVEL,
     SERVICE_TOGGLE_AUTO_ELEVATE,
 )
@@ -70,9 +72,9 @@ PLATFORMS: list[Platform] = [
 class QvantumRuntimeData(TypedDict):
     """Typed runtime data stored on a Qvantum config entry."""
 
-    api: Any  # QvantumApi — avoid circular import at module level
-    coordinators: dict[str, Any]
-    fast_coordinators: dict[str, Any]
+    api: QvantumApi
+    coordinators: dict[str, QvantumDataUpdateCoordinator]
+    fast_coordinators: dict[str, QvantumDataUpdateCoordinator]
     devices: list[dict[str, Any]]
 
 
@@ -296,13 +298,13 @@ async def async_setup(hass: HomeAssistant, _config: dict) -> bool:
     )
     hass.services.async_register(
         DOMAIN,
-        "activate_extra_hot_water",
+        SERVICE_ACTIVATE_EXTRA_HOT_WATER,
         handle_activate_extra_hot_water,
         schema=_SCHEMA_ACTIVATE_EXTRA_HOT_WATER,
     )
     hass.services.async_register(
         DOMAIN,
-        "cancel_extra_hot_water",
+        SERVICE_CANCEL_EXTRA_HOT_WATER,
         handle_cancel_extra_hot_water,
         schema=_SCHEMA_CANCEL_EXTRA_HOT_WATER,
     )
@@ -358,7 +360,10 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
     if not devices:
         _LOGGER.warning("No devices found for account")
         await api.close()
-        raise ConfigEntryError("No devices found for this account")
+        raise ConfigEntryError(
+            translation_domain=DOMAIN,
+            translation_key="setup_no_devices",
+        )
 
     # Remove device-registry entries that no longer exist in the account.
     # This prevents orphaned entities from accumulating when a device is deleted
@@ -433,6 +438,8 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
         await coordinator.async_load_auto_elevate_state()
         # Fast coordinator shares the same auto_elevate state
         fast_coordinator.auto_elevate_enabled = coordinator.auto_elevate_enabled
+        # Link coordinators so auto_elevate stays in sync when toggled at runtime
+        coordinator.set_linked_coordinator(fast_coordinator)
 
         # Fetch initial data for both coordinators with timeout protection (Issue #7)
         try:
@@ -446,7 +453,9 @@ async def async_setup_entry(hass: HomeAssistant, entry: ConfigEntry) -> bool:
             raise ConfigEntryNotReady(
                 f"Device {device['id']} not responding (timeout)"
             ) from err
-        except Exception as err:
+        except ConfigEntryAuthFailed:
+            raise
+        except Exception as err:  # TODO remove this broad catch?
             _LOGGER.warning(
                 "Failed first refresh for device %s: %s",
                 device["id"],

@@ -75,9 +75,15 @@ def mock_aiohttp_client_session():
     with a lightweight MagicMock that satisfies QvantumApi's constructor.
     """
     mock_session = MagicMock()
-    with patch(
-        "custom_components.qvantum_hass.async_get_clientsession",
-        return_value=mock_session,
+    with (
+        patch(
+            "custom_components.qvantum_hass.async_get_clientsession",
+            return_value=mock_session,
+        ),
+        patch(
+            "custom_components.qvantum_hass.config_flow.async_get_clientsession",
+            return_value=mock_session,
+        ),
     ):
         yield mock_session
 

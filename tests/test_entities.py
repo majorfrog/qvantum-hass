@@ -302,7 +302,7 @@ async def test_number_set_value_calls_set_setting() -> None:
         unit="°C",
     )
     device = {"id": "device_123", "name": "Test"}
-    entity = QvantumNumberEntity(mock_coordinator, device, entity_def)
+    entity = QvantumNumberEntity(mock_coordinator, device, mock_api, entity_def)
     entity.async_write_ha_state = MagicMock()  # no hass in unit test
 
     await entity.async_set_native_value(45)

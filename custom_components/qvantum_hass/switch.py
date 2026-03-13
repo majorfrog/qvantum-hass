@@ -140,7 +140,7 @@ def _create_switch_entity(
     if et == "auto_elevate":
         return QvantumAutoElevateAccessSwitch(coordinator, device, api)
     # Default: generic settings-backed switch
-    return QvantumSwitchEntity(coordinator, device, entity_def)
+    return QvantumSwitchEntity(coordinator, device, api, entity_def)
 
 
 async def async_setup_entry(
@@ -168,10 +168,11 @@ class QvantumSwitchEntity(QvantumEntity, SwitchEntity):  # pylint: disable=abstr
         self,
         coordinator: QvantumDataUpdateCoordinator,
         device: dict[str, Any],
+        api: Any,
         entity_def: QvantumEntityDef,
     ) -> None:
         """Initialize the switch entity from an entity definition."""
-        super().__init__(coordinator, device, None)
+        super().__init__(coordinator, device, api)
         self._setting_name = entity_def.api_key or entity_def.key
         self._attr_translation_key = entity_def.key
         self._attr_unique_id = f"{device['id']}_{entity_def.key}"
@@ -202,7 +203,7 @@ class QvantumSwitchEntity(QvantumEntity, SwitchEntity):  # pylint: disable=abstr
     async def async_turn_on(self, **kwargs: Any) -> None:
         """Turn the switch on."""
         try:
-            response = await self.coordinator.api.set_setting(
+            response = await self._api.set_setting(
                 self._device["id"],
                 self._setting_name,
                 True,
@@ -229,7 +230,7 @@ class QvantumSwitchEntity(QvantumEntity, SwitchEntity):  # pylint: disable=abstr
     async def async_turn_off(self, **kwargs: Any) -> None:
         """Turn the switch off."""
         try:
-            response = await self.coordinator.api.set_setting(
+            response = await self._api.set_setting(
                 self._device["id"],
                 self._setting_name,
                 False,

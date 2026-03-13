@@ -52,6 +52,7 @@ async def async_get_config_entry_diagnostics(
     """
     data = entry.runtime_data
     coordinators = data["coordinators"]
+    fast_coordinators = data.get("fast_coordinators", {})
     devices = data["devices"]
 
     diagnostics_data = {
@@ -79,6 +80,14 @@ async def async_get_config_entry_diagnostics(
             device_info["coordinator"] = {
                 "update_interval": str(coordinator.update_interval),
                 "last_update_success": coordinator.last_update_success,
+            }
+
+        fast_coordinator = fast_coordinators.get(device_id)
+        if fast_coordinator:
+            device_info["fast_coordinator"] = {
+                "update_interval": str(fast_coordinator.update_interval),
+                "last_update_success": fast_coordinator.last_update_success,
+                "consecutive_failures": fast_coordinator._consecutive_failures,
             }
 
             if coordinator.data:

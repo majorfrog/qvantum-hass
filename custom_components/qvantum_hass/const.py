@@ -60,3 +60,5 @@ MODEL: Final = "Qvantum Heat Pump"
 
 SERVICE_SET_ACCESS_LEVEL: Final = "set_access_level"
 SERVICE_TOGGLE_AUTO_ELEVATE: Final = "toggle_auto_elevate"
+SERVICE_ACTIVATE_EXTRA_HOT_WATER: Final = "activate_extra_hot_water"
+SERVICE_CANCEL_EXTRA_HOT_WATER: Final = "cancel_extra_hot_water"
